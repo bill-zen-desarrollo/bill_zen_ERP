@@ -1,0 +1,47 @@
+# Entornos virtuales
+venv/
+.venv/
+env/
+ENV/
+
+# Caché y compilados de Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+
+# Empaquetado y ejecutables (PyInstaller / distribución)
+build/
+dist/
+*.spec
+*.exe
+*.msi
+
+# Base de datos SQLite, respaldos y registros locales
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+respaldos/
+*.log
+
+# Variables de entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Archivos temporales de Excel / Office
+~$*.xlsx
+~$*.xls
+~$*.csv
+
+# Editores y sistema operativo
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+Desktop.ini
