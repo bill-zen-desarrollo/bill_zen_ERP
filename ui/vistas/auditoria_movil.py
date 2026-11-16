@@ -39,13 +39,13 @@ class Vista(ttk.Frame):
         acciones_cab.pack(side=RIGHT)
         ttk.Button(
             acciones_cab,
-            text="🔄 Nuevo QR",
+            text="Nuevo QR",
             style="Zen.TButton",
             command=self.generar_nuevo_qr,
         ).pack(side=LEFT, padx=(0, 8))
         ttk.Button(
             acciones_cab,
-            text="⛔ Cerrar sesiones móviles activas",
+            text="Cerrar sesiones móviles activas",
             style="Peligro.TButton",
             command=self.cerrar_sesiones_activas,
         ).pack(side=LEFT)
@@ -86,7 +86,7 @@ class Vista(ttk.Frame):
         # Cuenta regresiva de 5 minutos
         self.lbl_contador = ttk.Label(
             izq,
-            text="⏳ Expira en: 05:00",
+            text="Expira en: 05:00",
             style="Tarjeta.TLabel",
             foreground=tema.VERDE_OSCURO,
             font=(tema.FUENTE_TITULO, 14, "bold"),
@@ -106,13 +106,13 @@ class Vista(ttk.Frame):
         botones_qr.pack(fill=X, pady=(4, 0))
         ttk.Button(
             botones_qr,
-            text="🔄 Nuevo QR",
+            text="Nuevo QR",
             style="Oro.TButton",
             command=self.generar_nuevo_qr,
         ).pack(fill=X, pady=(0, 6))
         ttk.Button(
             botones_qr,
-            text="🌐 Copiar link de descarga de la App",
+            text="Copiar link de descarga de la App",
             style="Suave.TButton",
             command=self.copiar_enlace_descarga,
         ).pack(fill=X)
@@ -146,13 +146,13 @@ class Vista(ttk.Frame):
         self._fila_dato(
             est,
             "Permisos de Base de Datos:",
-            "🔒 100% SOLO LECTURA (sqlite3 mode=ro + query_only)",
+            "100% SOLO LECTURA (sqlite3 mode=ro + query_only)",
             color_valor=tema.VERDE,
         )
         self._fila_dato(
             est,
             "Control de Acceso:",
-            "🛡 Exclusivo Rol Administrador (id_rol == 1) · Cajeros bloqueados (HTTP 403)",
+            "Exclusivo Rol Administrador (id_rol == 1) · Cajeros bloqueados (HTTP 403)",
             color_valor=tema.VERDE_OSCURO,
         )
 
@@ -160,13 +160,13 @@ class Vista(ttk.Frame):
         barra_est.pack(fill=X, pady=(10, 0))
         ttk.Button(
             barra_est,
-            text="🌐 Reconectar túnel HTTPS",
+            text="Reconectar túnel HTTPS",
             style="Suave.TButton",
             command=self.reconectar_tunel,
         ).pack(side=LEFT)
         ttk.Button(
             barra_est,
-            text="⛔ Cerrar sesiones móviles activas",
+            text="Cerrar sesiones móviles activas",
             style="Peligro.TButton",
             command=self.cerrar_sesiones_activas,
         ).pack(side=RIGHT)
@@ -181,7 +181,7 @@ class Vista(ttk.Frame):
         ttk.Label(cab_bit, text="Bitácora de Accesos y Eventos Móviles", style="TarjetaTitulo.TLabel").pack(side=LEFT)
         ttk.Button(
             cab_bit,
-            text="⟳ Refrescar",
+            text="Refrescar",
             style="Suave.TButton",
             command=self.cargar_bitacora_movil,
         ).pack(side=RIGHT)
@@ -258,9 +258,9 @@ class Vista(ttk.Frame):
         mins, segs = divmod(restante, 60)
         if restante > 0:
             color = tema.VERDE_OSCURO if restante > 60 else tema.ROJO
-            self.lbl_contador.configure(text=f"⏳ Expira en: {mins:02d}:{segs:02d}", foreground=color)
+            self.lbl_contador.configure(text=f"Expira en: {mins:02d}:{segs:02d}", foreground=color)
         else:
-            self.lbl_contador.configure(text="⌛ Código QR expirado (00:00)", foreground=tema.ROJO)
+            self.lbl_contador.configure(text="Código QR expirado (00:00)", foreground=tema.ROJO)
             self.lbl_nota_qr.configure(
                 text="Pulsa 'Nuevo QR' para generar otro token de 5 minutos",
                 foreground=tema.ROJO,

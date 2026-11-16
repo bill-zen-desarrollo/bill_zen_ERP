@@ -42,8 +42,8 @@ class Vista(ttk.Frame):
 
         self.var_inactivos = ttk.BooleanVar(value=False)
         ttk.Checkbutton(barra, text="Ver inactivos", variable=self.var_inactivos, command=self.refrescar).pack(side=LEFT, padx=10)
-        ttk.Button(barra, text="📥 Subir Excel", style="Info.TButton", command=self.importar_excel).pack(side=RIGHT, padx=(8, 0))
-        ttk.Button(barra, text="📄 Bajar plantilla", style="Suave.TButton", command=self.descargar_plantilla).pack(side=RIGHT, padx=(8, 0))
+        ttk.Button(barra, text="Subir Excel", style="Info.TButton", command=self.importar_excel).pack(side=RIGHT, padx=(8, 0))
+        ttk.Button(barra, text="Bajar plantilla", style="Suave.TButton", command=self.descargar_plantilla).pack(side=RIGHT, padx=(8, 0))
         marco, self.tv = cmp.tabla(
             izq,
             [
@@ -165,7 +165,7 @@ class Vista(ttk.Frame):
         if precio > 0 and costo > 0:
             if precio < costo:
                 self.lbl_iva.configure(
-                    text=f"⚠ El precio de venta ({tema.moneda(precio)}) es menor al costo ({tema.moneda(costo)})",
+                    text=f"Atención: El precio de venta ({tema.moneda(precio)}) es menor al costo ({tema.moneda(costo)})",
                     foreground=tema.ROJO,
                 )
                 return

@@ -32,9 +32,9 @@ class VistaActivacion(ttk.Frame):
         es_alerta = motivo in ("HARDWARE_DIFERENTE", "LICENCIA_ADULTERADA")
 
         titulo = (
-            "⚠ Verificación de Equipo Requerida"
+            "Verificación de Equipo Requerida"
             if es_alerta
-            else "🔐 Activación de Licencia Bill Zen"
+            else "Activación de Licencia Bill Zen"
         )
         ttk.Label(
             c,
@@ -89,7 +89,7 @@ class VistaActivacion(ttk.Frame):
 
         self.btn_activar = ttk.Button(
             c,
-            text="🔐 Activar y vincular este equipo",
+            text="Activar y vincular este equipo",
             style="Zen.TButton",
             command=self.activar,
         )

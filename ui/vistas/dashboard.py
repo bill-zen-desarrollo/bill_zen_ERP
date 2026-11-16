@@ -63,19 +63,19 @@ class Vista(ttk.Frame):
         cab.pack(fill=X, pady=(0, 12))
         ttk.Label(cab, text=f"Hola, {saludo}", style="Cursiva.TLabel").pack(side=LEFT)
         ttk.Label(cab, text="  Así va tu negocio hoy", style="Subtitulo.TLabel").pack(side=LEFT, pady=(12, 0))
-        ttk.Button(cab, text="⟳ Actualizar", style="Suave.TButton", command=self.dibujar).pack(side=RIGHT)
+        ttk.Button(cab, text="Actualizar", style="Suave.TButton", command=self.dibujar).pack(side=RIGHT)
         if principal and hasattr(principal, "ir_a"):
             if licencia.permite_modulo("auditoria_movil"):
                 ttk.Button(
                     cab,
-                    text="📱 Auditoría Móvil (QR)",
+                    text="Auditoría Móvil (QR)",
                     style="Oro.TButton",
                     command=lambda: principal.ir_a("auditoria_movil"),
                 ).pack(side=RIGHT, padx=(0, 8))
             else:
                 btn_qr_bloq = ttk.Button(
                     cab,
-                    text="🔒 Auditoría Móvil (Plan Ultra)",
+                    text="Auditoría Móvil (Plan Ultra)",
                     style="Suave.TButton",
                     state="disabled",
                 )
@@ -106,7 +106,7 @@ class Vista(ttk.Frame):
                 resumen_cf = ", ".join(f"{x['concepto']} ({x['etiqueta_estado']})" for x in alertas_cf["items"][:3])
                 tk.Label(
                     aviso_f,
-                    text=f"🔔 Recordatorio de Cuentas Fijas: {resumen_cf}",
+                    text=f"Recordatorio de Cuentas Fijas: {resumen_cf}",
                     bg="#FDF0ED",
                     fg=tema.ROJO,
                     font=(tema.FUENTE, 9, "bold"),
@@ -114,7 +114,7 @@ class Vista(ttk.Frame):
                 if principal and hasattr(principal, "ir_a"):
                     ttk.Button(
                         aviso_f,
-                        text="Ir a Contabilidad →",
+                        text="Ir a Contabilidad",
                         style="Peligro.TButton",
                         command=lambda: principal.ir_a("contabilidad"),
                         padding=(8, 3),
@@ -190,7 +190,7 @@ class Vista(ttk.Frame):
         self._limpiar("bajo")
         bajos = rl.productos_stock_bajo()
         if not bajos:
-            ttk.Label(self.cont["bajo"], text="✔ Todo el inventario está en niveles saludables", style="Tarjeta.TLabel",
+            ttk.Label(self.cont["bajo"], text="Todo el inventario está en niveles saludables", style="Tarjeta.TLabel",
                       foreground=tema.VERDE_CLARO, font=(tema.FUENTE, 10, "bold")).pack(pady=30)
         else:
             m, tv = cmp.tabla(self.cont["bajo"], [("p", "Producto", 170, W), ("s", "Stock", 55, E), ("m", "Mín.", 50, E)], altura=6)

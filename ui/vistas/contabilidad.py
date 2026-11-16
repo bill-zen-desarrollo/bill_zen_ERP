@@ -1,5 +1,6 @@
 """Centro Contable y Financiero: Egresos, Cuentas por Pagar, Estado de Resultados (P&G),
 Punto de Equilibrio, Arqueo de Flujo de Caja (Efectivo vs Bancos) y Liquidación de IVA DIAN."""
+import calendar
 import os
 import tkinter as tk
 from datetime import date
@@ -12,6 +13,12 @@ from logica import reportes_logic as rl
 from logica.seguridad import ErrorValidacion
 from ui import componentes as cmp
 from ui import tema
+
+
+def _fin_mes_actual() -> str:
+    hoy = date.today()
+    ultimo_dia = calendar.monthrange(hoy.year, hoy.month)[1]
+    return date(hoy.year, hoy.month, ultimo_dia).isoformat()
 
 
 class Vista(ttk.Frame):
@@ -39,13 +46,13 @@ class Vista(ttk.Frame):
 
         ttk.Label(barra_fechas, text="Hasta:", style="Fondo.TLabel", font=(tema.FUENTE, 9, "bold")).pack(side=LEFT)
         self.e_hasta = ttk.Entry(barra_fechas, width=11)
-        self.e_hasta.insert(0, date.today().isoformat())
+        self.e_hasta.insert(0, _fin_mes_actual())
         self.e_hasta.pack(side=LEFT, padx=(4, 8))
 
         ttk.Button(barra_fechas, text="Hoy", style="Suave.TButton", command=self._rango_hoy, padding=(8, 5)).pack(side=LEFT, padx=2)
         ttk.Button(barra_fechas, text="Mes", style="Suave.TButton", command=self._rango_mes, padding=(8, 5)).pack(side=LEFT, padx=2)
-        ttk.Button(barra_fechas, text="⟳ Actualizar", style="Zen.TButton", command=self.refrescar, padding=(10, 5)).pack(side=LEFT, padx=(6, 4))
-        ttk.Button(barra_fechas, text="📥 Exportar CSV", style="Oro.TButton", command=self.exportar_contabilidad, padding=(10, 5)).pack(side=LEFT)
+        ttk.Button(barra_fechas, text="Actualizar", style="Zen.TButton", command=self.refrescar, padding=(10, 5)).pack(side=LEFT, padx=(6, 4))
+        ttk.Button(barra_fechas, text="Exportar CSV", style="Oro.TButton", command=self.exportar_contabilidad, padding=(10, 5)).pack(side=LEFT)
 
         # ================== FILA DE 5 TARJETAS KPI FINANCIERAS ==================
         self.fila_kpi = ttk.Frame(self)
@@ -78,7 +85,7 @@ class Vista(ttk.Frame):
         self.lbl_alerta_fijos.pack(side=LEFT, padx=12, pady=6, fill=X, expand=YES)
         ttk.Button(
             self.marco_alerta_fijos,
-            text="📅 Ir a Cuentas Fijas",
+            text="Ir a Cuentas Fijas",
             style="Peligro.TButton",
             command=lambda: self.notebook.select(self.tab_fijos),
             padding=(10, 3),
@@ -93,10 +100,10 @@ class Vista(ttk.Frame):
         self.tab_flujo = ttk.Frame(self.notebook, padding=10)
         self.tab_impuestos = ttk.Frame(self.notebook, padding=10)
 
-        self.notebook.add(self.tab_egresos, text="📋  Egresos y Cuentas por Pagar")
-        self.notebook.add(self.tab_fijos, text="📅  Cuentas Fijas Mensuales (Recordatorios)")
-        self.notebook.add(self.tab_flujo, text="💵  Estado de Resultados (P&G) y Flujo de Caja")
-        self.notebook.add(self.tab_impuestos, text="🏛  Liquidación IVA (DIAN) y Gastos por Rubro")
+        self.notebook.add(self.tab_egresos, text="  Egresos y Cuentas por Pagar  ")
+        self.notebook.add(self.tab_fijos, text="  Cuentas Fijas Mensuales (Recordatorios)  ")
+        self.notebook.add(self.tab_flujo, text="  Estado de Resultados (P&G) y Flujo de Caja  ")
+        self.notebook.add(self.tab_impuestos, text="  Liquidación IVA (DIAN) y Gastos por Rubro  ")
 
         self._construir_tab_egresos()
         self._construir_tab_fijos()
@@ -156,18 +163,18 @@ class Vista(ttk.Frame):
         acciones_inf.pack(fill=X, pady=(8, 0))
         ttk.Label(
             acciones_inf,
-            text="💡 Las filas en rojo están PENDIENTES por pagar.",
+            text="Nota: Las filas resaltadas en rojo están PENDIENTES por pagar.",
             style="Subtitulo.TLabel",
         ).pack(side=LEFT)
         ttk.Button(
             acciones_inf,
-            text="🗑 Eliminar seleccionado",
+            text="Eliminar seleccionado",
             style="Peligro.TButton",
             command=self.eliminar,
         ).pack(side=RIGHT)
         ttk.Button(
             acciones_inf,
-            text="✓ Marcar seleccionado como Pagado",
+            text="Marcar seleccionado como Pagado",
             style="Oro.TButton",
             command=self.marcar_pagado,
         ).pack(side=RIGHT, padx=(0, 8))
@@ -212,7 +219,13 @@ class Vista(ttk.Frame):
         self.cb_estado.pack(fill=X, pady=(2, 0))
 
         self.e_valor = cmp.campo(c, "Valor total ($) *", ancho=34)
-        ttk.Button(c, text="💾 Guardar egreso", style="Zen.TButton", command=self.guardar).pack(fill=X, pady=(10, 0))
+        self.var_es_fijo = ttk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            c,
+            text="Es cuenta fija mensual (recordar cada mes)",
+            variable=self.var_es_fijo,
+        ).pack(anchor=W, pady=(2, 6))
+        ttk.Button(c, text="Guardar egreso", style="Zen.TButton", command=self.guardar).pack(fill=X, pady=(4, 0))
 
     # ------------------------------------------------------------------
     # PESTAÑA 2: ESTADO DE RESULTADOS (P&G), PUNTO DE EQUILIBRIO Y CAJA
@@ -349,13 +362,13 @@ class Vista(ttk.Frame):
         self.e_valor_pago_fijo.pack(side=LEFT, padx=(6, 10))
         ttk.Button(
             barra_pago_fijo,
-            text="💸 Registrar pago de este mes",
+            text="Registrar pago de este mes",
             style="Oro.TButton",
             command=self.pagar_fijo_mes,
         ).pack(side=LEFT)
         ttk.Button(
             barra_pago_fijo,
-            text="🗑 Eliminar cuenta fija",
+            text="Eliminar cuenta fija",
             style="Peligro.TButton",
             command=self.eliminar_fijo,
         ).pack(side=RIGHT)
@@ -403,7 +416,7 @@ class Vista(ttk.Frame):
 
         btns_fijo = ttk.Frame(c, style="Tarjeta.TFrame")
         btns_fijo.pack(fill=X, pady=(8, 0))
-        self.btn_guardar_fijo = ttk.Button(btns_fijo, text="💾 Guardar cuenta fija", style="Zen.TButton", command=self.guardar_fijo)
+        self.btn_guardar_fijo = ttk.Button(btns_fijo, text="Guardar cuenta fija", style="Zen.TButton", command=self.guardar_fijo)
         self.btn_guardar_fijo.pack(side=LEFT, fill=X, expand=YES, padx=(0, 4))
         ttk.Button(btns_fijo, text="Limpiar", style="Suave.TButton", command=self.limpiar_fijo).pack(side=LEFT, padx=(4, 0))
 
@@ -423,7 +436,7 @@ class Vista(ttk.Frame):
         self.e_desde.delete(0, END)
         self.e_desde.insert(0, hoy.replace(day=1).isoformat())
         self.e_hasta.delete(0, END)
-        self.e_hasta.insert(0, hoy.isoformat())
+        self.e_hasta.insert(0, _fin_mes_actual())
         self.refrescar()
 
     def _kpi(self, clave, valor, detalle):
@@ -486,7 +499,7 @@ class Vista(ttk.Frame):
             ("(−) Gastos operativos pagados", r["gastos_pagados"], False, tema.TEXTO),
             ("(−) Cuentas por pagar causadas", r["gastos_pendientes"], False, tema.ROJO if r["gastos_pendientes"] > 0 else tema.TEXTO),
             ("(=) UTILIDAD NETA DEL PERIODO", r["utilidad_neta"], True, tema.VERDE if r["utilidad_neta"] >= 0 else tema.ROJO),
-            ("🎯 Punto de equilibrio (meta ventas)", r["punto_equilibrio"], True, tema.DORADO),
+            ("Punto de equilibrio (meta ventas)", r["punto_equilibrio"], True, tema.DORADO),
         ]
         for idx, (texto, val, negrita, color) in enumerate(lineas_pyg, start=1):
             ttk.Label(
@@ -505,9 +518,9 @@ class Vista(ttk.Frame):
         self.marco_pyg.columnconfigure(0, weight=1)
 
         estado_eq = (
-            "✔ Meta de punto de equilibrio superada (estás en zona de ganancias)."
+            "Meta de punto de equilibrio superada (estás en zona de ganancias)."
             if r["utilidad_neta"] >= 0 and r["ventas_netas"] >= r["punto_equilibrio"]
-            else f"⚠ Te faltan {tema.moneda(max(r['punto_equilibrio'] - r['ventas_netas'], 0))} en ventas netas para cubrir todos los gastos del periodo."
+            else f"Faltan {tema.moneda(max(r['punto_equilibrio'] - r['ventas_netas'], 0))} en ventas netas para cubrir todos los gastos del periodo."
         )
         ttk.Label(
             self.marco_pyg,
@@ -522,9 +535,9 @@ class Vista(ttk.Frame):
         for w in self.marco_resumen_caja.winfo_children():
             w.destroy()
         for col_i, (tit, val, col_acento) in enumerate((
-            ("💵 Efectivo Neto en Cajón", flujo["saldo_efectivo"], tema.VERDE),
-            ("🏦 Saldo Neto en Bancos / Digital", flujo["saldo_bancos"], tema.DORADO),
-            ("💰 Total Tesorería Disponible", flujo["saldo_total_tesoreria"], tema.VERDE_OSCURO),
+            ("Efectivo Neto en Cajón", flujo["saldo_efectivo"], tema.VERDE),
+            ("Saldo Neto en Bancos / Digital", flujo["saldo_bancos"], tema.DORADO),
+            ("Total Tesorería Disponible", flujo["saldo_total_tesoreria"], tema.VERDE_OSCURO),
         )):
             self.marco_resumen_caja.columnconfigure(col_i, weight=1, uniform="caja")
             box = ttk.Frame(self.marco_resumen_caja, style="Tarjeta.TFrame")
@@ -635,6 +648,7 @@ class Vista(ttk.Frame):
                 metodo_pago=self.cb_metodo.get(),
                 comprobante=self.e_comprobante.get(),
                 estado=self.cb_estado.get(),
+                es_gasto_fijo=bool(self.var_es_fijo.get()),
             )
         except ErrorValidacion as e:
             return cmp.mostrar_error(self, e)
@@ -643,6 +657,7 @@ class Vista(ttk.Frame):
         for e in (self.e_concepto, self.e_proveedor, self.e_comprobante, self.e_valor):
             e.delete(0, END)
         self.cb_estado.set("PAGADO")
+        self.var_es_fijo.set(False)
         self.refrescar()
 
     def marcar_pagado(self):
@@ -739,7 +754,7 @@ class Vista(ttk.Frame):
             extra = f" (+{len(info_alerta['items']) - 3} más)" if len(info_alerta["items"]) > 3 else ""
             self.lbl_alerta_fijos.configure(
                 text=(
-                    f"🔔 Recordatorio de Cuentas Fijas: Tienes {info_alerta['cantidad_alertas']} pago(s) próximo(s) o vencido(s) "
+                    f"Recordatorio de Cuentas Fijas: Tienes {info_alerta['cantidad_alertas']} pago(s) próximo(s) o vencido(s) "
                     f"por {tema.moneda(info_alerta['total_estimado_alerta'])}: {nombres}{extra}"
                 )
             )
@@ -756,7 +771,7 @@ class Vista(ttk.Frame):
             return
         self.id_fijo_editando = f["id_gasto_fijo"]
         self.lbl_modo_fijo.configure(text=f"Editando: {f['concepto']}")
-        self.btn_guardar_fijo.configure(text="💾 Actualizar cuenta fija")
+        self.btn_guardar_fijo.configure(text="Actualizar cuenta fija")
 
         for entry, val in (
             (self.e_fijo_concepto, f["concepto"]),
@@ -776,7 +791,7 @@ class Vista(ttk.Frame):
     def limpiar_fijo(self):
         self.id_fijo_editando = None
         self.lbl_modo_fijo.configure(text="Nueva Cuenta Fija Mensual")
-        self.btn_guardar_fijo.configure(text="💾 Guardar cuenta fija")
+        self.btn_guardar_fijo.configure(text="Guardar cuenta fija")
         for entry in (self.e_fijo_concepto, self.e_fijo_desc, self.e_fijo_prov, self.e_fijo_valor, self.e_valor_pago_fijo):
             entry.delete(0, END)
         self.sp_fijo_dia.set("5")

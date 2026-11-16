@@ -392,6 +392,30 @@ class PruebasBillZen(unittest.TestCase):
         ivas = rl.resumen_iva_dian(hoy, hoy)
         self.assertIsInstance(ivas, list)
 
+        # 4. Cuentas Fijas Mensuales y alertas de vencimiento
+        dia_hoy = date.today().day
+        id_fijo = rl.guardar_gasto_fijo(
+            concepto="Internet Fibra Óptica",
+            categoria="Servicios públicos (Agua/Luz/Gas/Internet)",
+            valor_estimado="120.000",
+            dia_pago=dia_hoy,
+            descripcion="Contrato #88412",
+            proveedor="Movistar Empresas",
+            metodo_pago="Transferencia",
+            dias_anticipacion=5,
+        )
+        alertas = rl.alertas_gastos_fijos()
+        self.assertTrue(alertas["hay_alertas"])
+        self.assertEqual(alertas["cantidad_alertas"], 1)
+
+        # Pagar la cuenta fija del mes la registra automáticamente en gastos y apaga la alerta del mes
+        rl.pagar_gasto_fijo_mes(id_fijo, valor_pagado="122.000", metodo_pago="Transferencia")
+        alertas_post = rl.alertas_gastos_fijos()
+        self.assertFalse(alertas_post["hay_alertas"])
+        gastos_hoy = rl.listar_gastos(hoy, hoy, texto="Internet Fibra")
+        self.assertEqual(len(gastos_hoy), 1)
+        self.assertEqual(gastos_hoy[0]["valor"], 122000)
+
 
 if __name__ == "__main__":
     unittest.main()

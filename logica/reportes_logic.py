@@ -55,6 +55,8 @@ def registrar_gasto(
     comprobante="",
     estado="PAGADO",
     fecha_vencimiento=None,
+    es_gasto_fijo=False,
+    dias_anticipacion=5,
 ):
     concepto = (concepto or "").strip()
     proveedor = (proveedor or "").strip()
@@ -95,6 +97,30 @@ def registrar_gasto(
         )
         auditar("REGISTRAR_GASTO", f"{categoria} [{estado}]: {concepto} {valor:.0f}", con)
 
+        if es_gasto_fijo:
+            try:
+                dia_fijo = int(str(fecha).split("-")[2][:2])
+            except Exception:
+                dia_fijo = date.today().day
+            dia_fijo = max(1, min(31, dia_fijo))
+            mes_pagado = str(fecha)[:7] if estado == "PAGADO" else ""
+            con.execute(
+                """INSERT INTO gastos_fijos
+                   (concepto, descripcion, categoria, proveedor, valor_estimado, dia_pago, dias_anticipacion, metodo_pago, ultimo_mes_pagado)
+                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                (
+                    concepto,
+                    f"Soporte: {comprobante}" if comprobante else "",
+                    categoria,
+                    proveedor,
+                    valor,
+                    dia_fijo,
+                    int(dias_anticipacion or 5),
+                    metodo_pago,
+                    mes_pagado,
+                ),
+            )
+
 
 @requiere_rol(ROL_ADMIN)
 def marcar_gasto_pagado(id_gasto, metodo_pago="Efectivo"):
@@ -128,7 +154,7 @@ def listar_gastos(desde, hasta, categoria=None, estado=None, texto=""):
     sql = """SELECT g.*, u.username
              FROM gastos g
              JOIN usuarios u ON u.id_usuario = g.id_usuario
-             WHERE g.fecha BETWEEN ? AND ?"""
+             WHERE (g.fecha BETWEEN ? AND ? OR COALESCE(g.estado, 'PAGADO') = 'PENDIENTE')"""
     params = [desde, hasta]
     if categoria and categoria != "Todas las categorías":
         sql += " AND g.categoria = ?"
@@ -169,7 +195,7 @@ def estado_resultados(desde, hasta):
                   SUM(CASE WHEN COALESCE(estado,'PAGADO')='PAGADO' THEN valor ELSE 0 END) AS pagado,
                   SUM(CASE WHEN COALESCE(estado,'PAGADO')='PENDIENTE' THEN valor ELSE 0 END) AS pendiente
            FROM gastos
-           WHERE fecha BETWEEN ? AND ?
+           WHERE (fecha BETWEEN ? AND ? OR COALESCE(estado,'PAGADO')='PENDIENTE')
            GROUP BY categoria
            ORDER BY total DESC""",
         (desde, hasta),
@@ -179,7 +205,7 @@ def estado_resultados(desde, hasta):
                   COALESCE(SUM(CASE WHEN COALESCE(estado,'PAGADO')='PENDIENTE' THEN valor ELSE 0 END), 0) AS gastos_pendientes,
                   COALESCE(SUM(CASE WHEN COALESCE(estado,'PAGADO')='PENDIENTE' THEN 1 ELSE 0 END), 0) AS conteo_pendientes
            FROM gastos
-           WHERE fecha BETWEEN ? AND ?""",
+           WHERE (fecha BETWEEN ? AND ? OR COALESCE(estado,'PAGADO')='PENDIENTE')""",
         (desde, hasta),
     )
 
@@ -328,23 +354,23 @@ def _calcular_estado_gasto_fijo(fila: dict, hoy: date | None = None) -> dict:
     pagado_este_mes = (fila.get("ultimo_mes_pagado") or "") == mes_actual
     if pagado_este_mes:
         estado_mes = "PAGADO_MES"
-        etiqueta = f"✔ Pagado ({mes_actual})"
+        etiqueta = f"Pagado ({mes_actual})"
         urgencia = 3
     elif dias_restantes < 0:
         estado_mes = "VENCIDO"
-        etiqueta = f"🚨 Vencido hace {abs(dias_restantes)} día(s) (Día {dia_efectivo})"
+        etiqueta = f"Vencido hace {abs(dias_restantes)} día(s) (Día {dia_efectivo})"
         urgencia = 0
     elif dias_restantes == 0:
         estado_mes = "PROXIMO"
-        etiqueta = f"⚠ ¡Vence HOY! (Día {dia_efectivo})"
+        etiqueta = f"Vence HOY (Día {dia_efectivo})"
         urgencia = 1
     elif dias_restantes <= anticipacion:
         estado_mes = "PROXIMO"
-        etiqueta = f"⚠ Vence en {dias_restantes} día(s) (Día {dia_efectivo})"
+        etiqueta = f"Vence en {dias_restantes} día(s) (Día {dia_efectivo})"
         urgencia = 1
     else:
         estado_mes = "PROGRAMADO"
-        etiqueta = f"⏳ Faltan {dias_restantes} días (Día {dia_efectivo})"
+        etiqueta = f"Faltan {dias_restantes} días (Día {dia_efectivo})"
         urgencia = 2
 
     return {
@@ -424,10 +450,38 @@ def listar_gastos_fijos(hoy: date | None = None) -> list[dict]:
 
 @requiere_rol(ROL_ADMIN)
 def alertas_gastos_fijos(hoy: date | None = None) -> dict:
-    """Devuelve las cuentas fijas que están VENCIDAS o PRÓXIMAS a vencer en el mes actual."""
+    """Devuelve las cuentas fijas y cuentas por pagar ('PENDIENTE') que están VENCIDAS o PRÓXIMAS a vencer."""
+    hoy = hoy or date.today()
     todas = listar_gastos_fijos(hoy=hoy)
     vencidas = [f for f in todas if f["estado_mes"] == "VENCIDO"]
     proximas = [f for f in todas if f["estado_mes"] == "PROXIMO"]
+
+    # También incluir recibos registrados en `gastos` con estado = 'PENDIENTE' cuya fecha esté cerca (<= 10 días) o vencida
+    pendientes_bd = consultar("SELECT * FROM gastos WHERE COALESCE(estado, 'PAGADO') = 'PENDIENTE'")
+    nombres_fijos = {f["concepto"].strip().lower() for f in todas}
+    for p in pendientes_bd:
+        if p["concepto"].strip().lower() in nombres_fijos:
+            continue
+        try:
+            f_pago = date.fromisoformat(str(p["fecha"])[:10])
+            dias_rest = (f_pago - hoy).days
+        except Exception:
+            dias_rest = 0
+        if dias_rest < 0:
+            vencidas.append({
+                "concepto": p["concepto"],
+                "valor_estimado": p["valor"],
+                "estado_mes": "VENCIDO",
+                "etiqueta_estado": f"Vencido ({p['fecha']})",
+            })
+        elif dias_rest <= 10:
+            proximas.append({
+                "concepto": p["concepto"],
+                "valor_estimado": p["valor"],
+                "estado_mes": "PROXIMO",
+                "etiqueta_estado": f"Vence en {dias_rest} día(s) ({p['fecha']})" if dias_rest > 0 else "Vence HOY",
+            })
+
     alertas = vencidas + proximas
     total_alerta = sum(float(x["valor_estimado"] or 0) for x in alertas)
     return {

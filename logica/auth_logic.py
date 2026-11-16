@@ -297,3 +297,7 @@ def iniciar_sesion(username, password) -> dict:
     if error:
         raise ErrorValidacion(error)
     return usuario_ok
+
+
+def cerrar_sesion():
+    Sesion.cerrar()

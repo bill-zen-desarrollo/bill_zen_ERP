@@ -1,22 +1,20 @@
-"""Ventana principal: menú lateral según rol + área de contenido.
-
-La sesión permanece abierta hasta que el usuario la cierre manualmente
-(en una tienda pueden pasar muchos minutos sin clientes)."""
+"""Marco principal: barra lateral verde con navegación según rol y área de contenido beige."""
+import importlib
 import threading
 import tkinter as tk
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
-from logica import licencia
+from logica import auth_logic, licencia
 from logica.empresa_logic import obtener_empresa
-from logica.seguridad import ROL_ADMIN, ROL_CAJERO, ErrorPermiso, Sesion
+from logica.seguridad import ROL_ADMIN, ROL_CAJERO, Sesion
 from ui import componentes as cmp
 from ui import tema
 
 
-def _cargar(nombre):
-    import importlib
-    if False:  # pistas estáticas para que PyInstaller empaquete todas las vistas y sus dependencias
+def _cargar_vista(nombre: str):
+    """Importa bajo demanda cada vista para acelerar el arranque."""
+    if False:  # pistas estáticas para que PyInstaller empaquete todos los submódulos
         import ui.vistas.auditoria_movil
         import ui.vistas.configuracion
         import ui.vistas.contabilidad
@@ -35,23 +33,23 @@ def _cargar(nombre):
 
 # (clave, texto del menú, módulo, roles permitidos)
 SECCIONES = [
-    ("dashboard", "▦  Dashboard", "dashboard", (ROL_ADMIN,)),
-    ("facturacion", "🧾  Facturación", "facturacion", (ROL_CAJERO,)),
-    ("facturas", "📄  Facturas emitidas", "facturas", (ROL_ADMIN, ROL_CAJERO)),
-    ("productos", "📦  Productos", "productos", (ROL_ADMIN,)),
-    ("inventario", "▤  Inventario", "inventario", (ROL_ADMIN, ROL_CAJERO)),
-    ("contabilidad", "＄  Contabilidad", "contabilidad", (ROL_ADMIN,)),
-    ("reportes", "📈  Reportes", "reportes", (ROL_ADMIN,)),
-    ("usuarios", "👥  Usuarios", "usuarios", (ROL_ADMIN,)),
-    ("auditoria_movil", "📱  Auditoría Móvil (QR)", "auditoria_movil", (ROL_ADMIN,)),
-    ("configuracion", "⚙  Configuración", "configuracion", (ROL_ADMIN,)),
+    ("dashboard", "Dashboard", "dashboard", (ROL_ADMIN,)),
+    ("facturacion", "Facturación", "facturacion", (ROL_CAJERO,)),
+    ("facturas", "Facturas emitidas", "facturas", (ROL_ADMIN, ROL_CAJERO)),
+    ("productos", "Productos", "productos", (ROL_ADMIN,)),
+    ("inventario", "Inventario", "inventario", (ROL_ADMIN, ROL_CAJERO)),
+    ("contabilidad", "Contabilidad", "contabilidad", (ROL_ADMIN,)),
+    ("reportes", "Reportes", "reportes", (ROL_ADMIN,)),
+    ("usuarios", "Usuarios", "usuarios", (ROL_ADMIN,)),
+    ("auditoria_movil", "Auditoría Móvil (QR)", "auditoria_movil", (ROL_ADMIN,)),
+    ("configuracion", "Configuración", "configuracion", (ROL_ADMIN,)),
 ]
 
 
 class Principal(ttk.Frame):
-    def __init__(self, padre, al_cerrar_sesion):
+    def __init__(self, padre, al_cerrar_sesion=None, al_salir=None):
         super().__init__(padre)
-        self.al_cerrar_sesion = al_cerrar_sesion
+        self.al_cerrar_sesion = al_cerrar_sesion or al_salir or (lambda: None)
         self.pack(fill=BOTH, expand=YES)
         self.usuario = Sesion.usuario
         self.plan_actual = licencia.obtener_plan_actual()
@@ -68,14 +66,19 @@ class Principal(ttk.Frame):
         ttk.Label(logo, text="Bill ", style="Logo.TLabel").pack(side=LEFT)
         ttk.Label(logo, text="Zen", style="LogoZen.TLabel").pack(side=LEFT)
         emp = obtener_empresa() or {}
-        ttk.Label(lateral, text=emp.get("razon_social", ""), style="Lateral.TLabel", wraplength=200,
-                  font=(tema.FUENTE, 9)).pack(anchor=W, padx=24, pady=(0, 4))
+        ttk.Label(
+            lateral,
+            text=emp.get("razon_social", ""),
+            style="Lateral.TLabel",
+            wraplength=200,
+            font=(tema.FUENTE, 9),
+        ).pack(anchor=W, padx=24, pady=(0, 4))
 
         fila_plan = ttk.Frame(lateral, style="Lateral.TFrame", padding=(24, 0, 18, 12))
         fila_plan.pack(fill=X)
         self.lbl_plan = ttk.Label(
             fila_plan,
-            text=f"★ PLAN {licencia.etiqueta_corta_plan(self.plan_actual)}",
+            text=f"PLAN {licencia.etiqueta_corta_plan(self.plan_actual)}",
             style="Lateral.TLabel",
             foreground=tema.DORADO_CLARO,
             font=(tema.FUENTE, 8, "bold"),
@@ -84,7 +87,7 @@ class Principal(ttk.Frame):
 
         btn_sync = tk.Label(
             fila_plan,
-            text="⟳ Actualizar",
+            text="Actualizar",
             bg=tema.VERDE_OSCURO,
             fg=tema.BEIGE,
             font=(tema.FUENTE, 8, "underline"),
@@ -103,10 +106,20 @@ class Principal(ttk.Frame):
 
         pie = ttk.Frame(lateral, style="Lateral.TFrame", padding=18)
         pie.pack(side=BOTTOM, fill=X)
-        ttk.Label(pie, text=self.usuario["nombre_completo"], style="Lateral.TLabel",
-                  font=(tema.FUENTE, 10, "bold"), wraplength=200).pack(anchor=W)
-        ttk.Label(pie, text=self.usuario["rol"].capitalize(), style="Lateral.TLabel",
-                  foreground=tema.DORADO_CLARO, font=(tema.FUENTE, 9)).pack(anchor=W, pady=(0, 10))
+        ttk.Label(
+            pie,
+            text=self.usuario["nombre_completo"],
+            style="Lateral.TLabel",
+            font=(tema.FUENTE, 10, "bold"),
+            wraplength=200,
+        ).pack(anchor=W)
+        ttk.Label(
+            pie,
+            text=self.usuario["rol"].capitalize(),
+            style="Lateral.TLabel",
+            foreground=tema.DORADO_CLARO,
+            font=(tema.FUENTE, 9),
+        ).pack(anchor=W, pady=(0, 10))
         ttk.Button(pie, text="Cerrar sesión", style="Oro.TButton", command=self.cerrar_sesion).pack(fill=X)
 
         self.area = ttk.Frame(self, padding=(28, 22))
@@ -122,7 +135,7 @@ class Principal(ttk.Frame):
         for w in self.marco_menu.winfo_children():
             w.destroy()
         self.botones.clear()
-        self.lbl_plan.configure(text=f"★ PLAN {licencia.etiqueta_corta_plan(self.plan_actual)}")
+        self.lbl_plan.configure(text=f"PLAN {licencia.etiqueta_corta_plan(self.plan_actual)}")
 
         for clave, texto, modulo, roles in SECCIONES:
             if self.usuario["id_rol"] in roles:
@@ -140,7 +153,7 @@ class Principal(ttk.Frame):
                     plan_req = licencia.plan_requerido_para(clave)
                     b = ttk.Button(
                         self.marco_menu,
-                        text=f"🔒  {texto}",
+                        text=f"{texto} (Plan {plan_req})",
                         style="Menu.TButton",
                         state="disabled",
                     )
@@ -154,8 +167,11 @@ class Principal(ttk.Frame):
 
     def _sincronizar_plan_bg(self):
         res = licencia.sincronizar_plan_con_nube(timeout_seg=3.0)
-        if res.get("actualizado") and self.winfo_exists():
-            self.after(0, lambda: self._aplicar_cambio_plan(res["plan"]))
+        try:
+            if res.get("actualizado") and self.winfo_exists():
+                self.after(0, lambda: self._aplicar_cambio_plan(res["plan"]))
+        except Exception:
+            pass
 
     def sincronizar_plan_manual(self):
         res = licencia.sincronizar_plan_con_nube(timeout_seg=4.0)
@@ -169,30 +185,45 @@ class Principal(ttk.Frame):
             return
         self.plan_actual = nuevo_plan
         self._construir_menu_lateral()
-        if getattr(self, "seccion_activa", None) in self.botones:
+        if self.seccion_activa in self.botones:
             self.ir_a(self.seccion_activa)
-        cmp.toast(self, f"¡Actualizado a {licencia.nombre_legible_plan(nuevo_plan)}! Módulos sincronizados.")
+        else:
+            primera = "dashboard" if self.usuario["id_rol"] == ROL_ADMIN else "facturacion"
+            self.ir_a(primera)
+        cmp.toast(
+            self,
+            f"Plan actualizado a {licencia.nombre_legible_plan(nuevo_plan)}. Nuevos módulos habilitados.",
+        )
 
     def ir_a(self, clave):
-        if clave not in self.botones or not licencia.permite_modulo(clave, self.plan_actual):
+        if not licencia.permite_modulo(clave, self.plan_actual):
+            plan_req = licencia.plan_requerido_para(clave)
+            cmp.mostrar_error(
+                self,
+                f"Este módulo requiere el Plan {plan_req} o superior. "
+                f"Tu plan actual es {licencia.nombre_legible_plan(self.plan_actual)}.",
+            )
             return
+
         self.seccion_activa = clave
         for k, b in self.botones.items():
             b.configure(style="MenuActivo.TButton" if k == clave else "Menu.TButton")
+
         if self.vista_actual is not None:
             self.vista_actual.destroy()
-        for c, texto, modulo, roles in SECCIONES:
-            if c == clave:
-                try:
-                    self.vista_actual = _cargar(modulo)(self.area, self)
-                    self.vista_actual.pack(fill=BOTH, expand=YES)
-                except ErrorPermiso as e:
-                    cmp.mostrar_error(self, e)
-                break
+            self.vista_actual = None
+
+        modulo = next(m for k, _t, m, _r in SECCIONES if k == clave)
+        clase_vista = _cargar_vista(modulo)
+        self.vista_actual = clase_vista(self.area, self)
+        self.vista_actual.pack(fill=BOTH, expand=YES)
 
     def cerrar_sesion(self):
-        if not cmp.confirmar(self, "¿Deseas cerrar tu sesión?"):
-            return
+        from ui.vistas.facturacion import limpiar_borrador_facturacion
+        limpiar_borrador_facturacion()
         Sesion.cerrar()
+        padre = self.master
         self.destroy()
+        if padre:
+            padre.update_idletasks()
         self.al_cerrar_sesion()

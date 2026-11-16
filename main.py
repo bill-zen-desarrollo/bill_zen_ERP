@@ -56,6 +56,7 @@ class BillZenApp:
                 pass
         inicializar_base_datos()
         self.ventana = ttk.Window(themename="flatly", iconphoto=None)
+        self.ventana.report_callback_exception = maneja_excepcion
         estilo = tema.registrar_tema()
         tema.aplicar_estilos(estilo)
         self.ventana.title("Bill Zen ERP")

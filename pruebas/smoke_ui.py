@@ -50,29 +50,51 @@ ul.crear_usuario("caja1", "Carlos Caja", "Cajero123", "Cajero123")
 ok = True
 for rol, usuario in (("admin", ("admin", "Clave1234")), ("cajero", ("caja1", "Cajero123"))):
     auth_logic.iniciar_sesion(*usuario)
-    p = Principal(root, lambda: None)
+    p = Principal(root, al_cerrar_sesion=lambda: None)
     for clave in list(p.botones):
         try:
             p.ir_a(clave)
             root.update()
             if clave == "facturacion":
                 v = p.vista_actual
-                primer_item = v.tv.get_children()[0]
-                v.tv.selection_set(primer_item)
+                primer_id = int(list(v.productos.keys())[0])
+                primer_cod = v.productos[str(primer_id)]["codigo"]
+                # 1. Probar agregar por código de barras con cantidad previa = 4
                 v.sp_cant_agregar.set("4")
-                v.agregar()
-                assert v.carrito[int(primer_item)]["cantidad"] == 4
-                # Probar botón + y - sin volver a hacer clic manual en el carrito
-                v.tv_car.selection_remove(v.tv_car.selection())
+                v.e_buscar.insert(0, primer_cod)
+                v._confirmar_busqueda_o_sugerencia()
+                assert v.carrito[primer_id]["cantidad"] == 4
+                # 2. Probar autocompletado por nombre parcial ("Leche") + clic/enter en sugerencia
+                v.e_buscar.insert(0, "Leche")
+                v._al_teclear_codigo()
+                assert len(v._sugerencias_actuales) >= 1
+                v._clic_sugerencia()
+                # 3. Probar botón + y - sobre el primer producto
+                v.tv_car.selection_set(str(primer_id))
                 v.cambiar(1)
-                assert v.carrito[int(primer_item)]["cantidad"] == 5
+                assert v.carrito[primer_id]["cantidad"] == 5
                 v.cambiar(-2)
-                assert v.carrito[int(primer_item)]["cantidad"] == 3
-                # Probar fijar cantidad directa en el carrito
+                assert v.carrito[primer_id]["cantidad"] == 3
+                # 4. Probar fijar cantidad directa en la factura
                 v.e_cant_car.delete(0, "end")
                 v.e_cant_car.insert(0, "7")
                 v.fijar_cantidad_carrito()
-                assert v.carrito[int(primer_item)]["cantidad"] == 7
+                assert v.carrito[primer_id]["cantidad"] == 7
+                # 5. Probar persistencia del carrito al cambiar a Inventario / Facturas emitidas y regresar
+                v.e_cliente.delete(0, "end")
+                v.e_cliente.insert(0, "Cliente Prueba Persistencia")
+                v._guardar_estado_borrador()
+                p.ir_a("inventario")
+                root.update()
+                p.ir_a("facturas")
+                root.update()
+                p.ir_a("facturacion")
+                root.update()
+                v2 = p.vista_actual
+                assert primer_id in v2.carrito and v2.carrito[primer_id]["cantidad"] == 7
+                assert v2.e_cliente.get() == "Cliente Prueba Persistencia"
+                v2.vaciar()
+                assert len(v2.carrito) == 0
             print(f"OK   {rol:7s} {clave}")
         except Exception as e:
             ok = False
@@ -80,7 +102,7 @@ for rol, usuario in (("admin", ("admin", "Clave1234")), ("cajero", ("caja1", "Ca
             print(f"FAIL {rol:7s} {clave}: {e}")
             traceback.print_exc()
     print(rol, "menú:", list(p.botones))
-    p.destroy()
+    p.cerrar_sesion()
 
 # Verificar Camaleón UI con plan 'basico' (oculta/deshabilita módulos premium con candado)
 auth_logic.iniciar_sesion("admin", "Clave1234")
@@ -91,6 +113,18 @@ assert "contabilidad" not in p_basico.botones
 assert "productos" in p_basico.botones
 print("admin (plan basico) menú habilitado:", list(p_basico.botones))
 p_basico.destroy()
+
+# Probar vista previa de tirilla térmica POS 80mm (estilo D1 / Ara / Epson TM-T88V)
+from ui.recibo import VentanaFactura, _formatear_texto_tirilla, _html
+fac_prueba = fl.obtener_factura(1)
+emp_prueba = empresa_logic.obtener_empresa()
+txt_tirilla = _formatear_texto_tirilla(fac_prueba, emp_prueba)
+html_tirilla = _html(fac_prueba, emp_prueba)
+assert "DISCRIMINACION DE IMPUESTOS" in txt_tirilla
+assert "size: 80mm auto" in html_tirilla
+vf = VentanaFactura(root, fac_prueba)
+root.update()
+vf.destroy()
 
 root.destroy()
 print("RESULTADO:", "TODO OK" if ok else "HAY ERRORES")
