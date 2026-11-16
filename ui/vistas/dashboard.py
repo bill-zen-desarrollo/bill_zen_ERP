@@ -74,14 +74,14 @@ class Vista(ttk.Frame):
             else:
                 btn_qr_bloq = ttk.Button(
                     cab,
-                    text="🔒 Auditoría Móvil (Plan Pro)",
+                    text="🔒 Auditoría Móvil (Plan Ultra)",
                     style="Suave.TButton",
                     state="disabled",
                 )
                 btn_qr_bloq.pack(side=RIGHT, padx=(0, 8))
                 cmp.vincular_tooltip(
                     btn_qr_bloq,
-                    "La Auditoría Remota Móvil por QR es exclusiva del Plan Pro. Actualiza tu plan para activarla.",
+                    "La Auditoría Remota Móvil por QR es exclusiva del Plan Ultra. Actualiza tu plan para activarla.",
                 )
 
         self.fila_kpi = ttk.Frame(self)

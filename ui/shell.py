@@ -2,6 +2,8 @@
 
 La sesión permanece abierta hasta que el usuario la cierre manualmente
 (en una tienda pueden pasar muchos minutos sin clientes)."""
+import threading
+import tkinter as tk
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
@@ -68,37 +70,36 @@ class Principal(ttk.Frame):
         emp = obtener_empresa() or {}
         ttk.Label(lateral, text=emp.get("razon_social", ""), style="Lateral.TLabel", wraplength=200,
                   font=(tema.FUENTE, 9)).pack(anchor=W, padx=24, pady=(0, 4))
-        etiqueta_plan = f"★ PLAN {self.plan_actual.upper()}"
-        ttk.Label(
-            lateral,
-            text=etiqueta_plan,
+
+        fila_plan = ttk.Frame(lateral, style="Lateral.TFrame", padding=(24, 0, 18, 12))
+        fila_plan.pack(fill=X)
+        self.lbl_plan = ttk.Label(
+            fila_plan,
+            text=f"★ PLAN {licencia.etiqueta_corta_plan(self.plan_actual)}",
             style="Lateral.TLabel",
             foreground=tema.DORADO_CLARO,
             font=(tema.FUENTE, 8, "bold"),
-        ).pack(anchor=W, padx=24, pady=(0, 14))
+        )
+        self.lbl_plan.pack(side=LEFT)
 
-        for clave, texto, modulo, roles in SECCIONES:
-            if self.usuario["id_rol"] in roles:
-                habilitado = licencia.permite_modulo(clave, self.plan_actual)
-                if habilitado:
-                    b = ttk.Button(lateral, text=texto, style="Menu.TButton", command=lambda c=clave: self.ir_a(c))
-                    b.pack(fill=X)
-                    self.botones[clave] = b
-                else:
-                    plan_req = licencia.plan_requerido_para(clave)
-                    b = ttk.Button(
-                        lateral,
-                        text=f"🔒  {texto}",
-                        style="Menu.TButton",
-                        state="disabled",
-                    )
-                    b.pack(fill=X)
-                    cmp.vincular_tooltip(
-                        b,
-                        f"Disponible desde el Plan {plan_req}.\n"
-                        f"Tu plan actual es {self.plan_actual.capitalize()}. "
-                        "Actualiza en bill-zen-users.vercel.app para desbloquearlo.",
-                    )
+        btn_sync = tk.Label(
+            fila_plan,
+            text="⟳ Actualizar",
+            bg=tema.VERDE_OSCURO,
+            fg=tema.BEIGE,
+            font=(tema.FUENTE, 8, "underline"),
+            cursor="hand2",
+        )
+        btn_sync.pack(side=RIGHT)
+        btn_sync.bind("<Button-1>", lambda e: self.sincronizar_plan_manual())
+        cmp.vincular_tooltip(
+            btn_sync,
+            "¿Mejoraste tu plan en la web? Haz clic aquí para sincronizar tu licencia y desbloquear tus nuevos módulos al instante.",
+        )
+
+        self.marco_menu = ttk.Frame(lateral, style="Lateral.TFrame")
+        self.marco_menu.pack(fill=X)
+        self._construir_menu_lateral()
 
         pie = ttk.Frame(lateral, style="Lateral.TFrame", padding=18)
         pie.pack(side=BOTTOM, fill=X)
@@ -111,12 +112,71 @@ class Principal(ttk.Frame):
         self.area = ttk.Frame(self, padding=(28, 22))
         self.area.pack(side=LEFT, fill=BOTH, expand=YES)
 
-        primera = "dashboard" if self.usuario["id_rol"] == ROL_ADMIN else "facturacion"
-        self.ir_a(primera)
+        self.seccion_activa = "dashboard" if self.usuario["id_rol"] == ROL_ADMIN else "facturacion"
+        self.ir_a(self.seccion_activa)
+
+        # Sincronizar silenciosamente con la nube al iniciar sesión por si el usuario mejoró su plan en la web
+        threading.Thread(target=self._sincronizar_plan_bg, daemon=True).start()
+
+    def _construir_menu_lateral(self):
+        for w in self.marco_menu.winfo_children():
+            w.destroy()
+        self.botones.clear()
+        self.lbl_plan.configure(text=f"★ PLAN {licencia.etiqueta_corta_plan(self.plan_actual)}")
+
+        for clave, texto, modulo, roles in SECCIONES:
+            if self.usuario["id_rol"] in roles:
+                habilitado = licencia.permite_modulo(clave, self.plan_actual)
+                if habilitado:
+                    b = ttk.Button(
+                        self.marco_menu,
+                        text=texto,
+                        style="Menu.TButton",
+                        command=lambda c=clave: self.ir_a(c),
+                    )
+                    b.pack(fill=X)
+                    self.botones[clave] = b
+                else:
+                    plan_req = licencia.plan_requerido_para(clave)
+                    b = ttk.Button(
+                        self.marco_menu,
+                        text=f"🔒  {texto}",
+                        style="Menu.TButton",
+                        state="disabled",
+                    )
+                    b.pack(fill=X)
+                    cmp.vincular_tooltip(
+                        b,
+                        f"Disponible desde el Plan {plan_req}.\n"
+                        f"Tu plan actual es {licencia.nombre_legible_plan(self.plan_actual)}. "
+                        "Actualiza en bill-zen-users.vercel.app para desbloquearlo.",
+                    )
+
+    def _sincronizar_plan_bg(self):
+        res = licencia.sincronizar_plan_con_nube(timeout_seg=3.0)
+        if res.get("actualizado") and self.winfo_exists():
+            self.after(0, lambda: self._aplicar_cambio_plan(res["plan"]))
+
+    def sincronizar_plan_manual(self):
+        res = licencia.sincronizar_plan_con_nube(timeout_seg=4.0)
+        if res.get("actualizado"):
+            self._aplicar_cambio_plan(res["plan"])
+        else:
+            cmp.toast(self, f"Tu licencia está al día: {licencia.nombre_legible_plan(self.plan_actual)}")
+
+    def _aplicar_cambio_plan(self, nuevo_plan: str):
+        if not self.winfo_exists():
+            return
+        self.plan_actual = nuevo_plan
+        self._construir_menu_lateral()
+        if getattr(self, "seccion_activa", None) in self.botones:
+            self.ir_a(self.seccion_activa)
+        cmp.toast(self, f"¡Actualizado a {licencia.nombre_legible_plan(nuevo_plan)}! Módulos sincronizados.")
 
     def ir_a(self, clave):
         if clave not in self.botones or not licencia.permite_modulo(clave, self.plan_actual):
             return
+        self.seccion_activa = clave
         for k, b in self.botones.items():
             b.configure(style="MenuActivo.TButton" if k == clave else "Menu.TButton")
         if self.vista_actual is not None:

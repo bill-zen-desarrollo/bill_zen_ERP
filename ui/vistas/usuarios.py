@@ -2,7 +2,7 @@
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
-from logica import usuarios_logic as ul
+from logica import licencia, usuarios_logic as ul
 from logica.seguridad import ROL_ADMIN, ROL_CAJERO, ErrorValidacion
 from ui import componentes as cmp
 from ui import tema
@@ -14,7 +14,13 @@ class Vista(ttk.Frame):
     def __init__(self, padre, principal):
         super().__init__(padre)
         self.id_sel = None
-        cmp.encabezado(self, "Usuarios", "Crea cuentas para tu equipo y controla sus permisos").pack(anchor=W, pady=(0, 12))
+        max_caj = licencia.max_cajeros_permitidos()
+        sub = (
+            f"{licencia.nombre_legible_plan()}: permite hasta {max_caj} cajero activo (además del Administrador)"
+            if max_caj is not None
+            else f"{licencia.nombre_legible_plan()}: creación de cajeros ilimitada habilitada"
+        )
+        cmp.encabezado(self, "Usuarios", sub).pack(anchor=W, pady=(0, 12))
         cuerpo = ttk.Frame(self)
         cuerpo.pack(fill=BOTH, expand=YES)
         marco, self.tv = cmp.tabla(cuerpo, [("u", "Usuario", 110, W), ("n", "Nombre", 200, W), ("r", "Rol", 110, W),

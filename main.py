@@ -90,6 +90,12 @@ class BillZenApp:
             VistaActivacion(self.ventana, estado_lic, al_activar=self.iniciar)
             return
 
+        # Si ya tiene licencia local, consulta rápido a Vercel/Neon si mejoró su plan en la web
+        try:
+            licencia.sincronizar_plan_con_nube(timeout_seg=2.5)
+        except Exception:
+            pass
+
         if (not empresa_logic.empresa_registrada()
                 or not auth_logic.existe_admin()
                 or not auth_logic.tiene_preguntas_admin()):

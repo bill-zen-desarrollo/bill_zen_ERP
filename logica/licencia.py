@@ -17,6 +17,7 @@ import json
 import os
 import subprocess
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 
@@ -32,29 +33,48 @@ URL_PORTAL_PLANES = "https://bill-zen-users.vercel.app/#planes"
 
 PLAN_BASICO = "basico"
 PLAN_STANDART = "standart"
-PLAN_PRO = "pro"
-PLANES_VALIDOS = (PLAN_BASICO, PLAN_STANDART, PLAN_PRO)
+PLAN_ULTRA = "ultra"
+PLAN_PRO = "ultra"  # Alias de compatibilidad hacia Plan Ultra
+PLANES_VALIDOS = (PLAN_BASICO, PLAN_STANDART, PLAN_ULTRA, "pro")
 
 NIVELES_PLAN = {
     PLAN_BASICO: 1,
     PLAN_STANDART: 2,
-    PLAN_PRO: 3,
+    PLAN_ULTRA: 3,
+    "pro": 3,
 }
 
-# Nivel mínimo requerido por cada módulo de la interfaz
+NOMBRES_PLAN = {
+    PLAN_BASICO: "Plan Básico",
+    PLAN_STANDART: "Plan Standard",
+    PLAN_ULTRA: "Plan Ultra",
+    "pro": "Plan Ultra",
+}
+
+ETIQUETAS_CORTAS_PLAN = {
+    PLAN_BASICO: "BÁSICO",
+    PLAN_STANDART: "STANDARD",
+    PLAN_ULTRA: "ULTRA",
+    "pro": "ULTRA",
+}
+
+# Nivel mínimo requerido por cada módulo de la interfaz:
+# - Básico: Dashboard, Facturación POS (sin DIAN), Facturas, Productos, Inventario, Usuarios (máx. 1 cajero), Configuración
+# - Standard: Stack completo de escritorio (+ Contabilidad P&G, + Reportes y CSV, + Facturación Electrónica DIAN, + Cajeros ilimitados)
+# - Ultra: Absolutamente todo (+ Auditoría Remota Móvil por QR)
 PLAN_MINIMO_MODULO = {
     "dashboard": PLAN_BASICO,
     "facturacion": PLAN_BASICO,
     "facturas": PLAN_BASICO,
     "productos": PLAN_BASICO,
     "inventario": PLAN_BASICO,
+    "usuarios": PLAN_BASICO,
     "configuracion": PLAN_BASICO,
-    # Módulos bloqueados en plan 'basico' (requieren 'standart' o 'pro')
+    # Módulos bloqueados en Plan Básico (desbloqueados desde Plan Standard)
     "contabilidad": PLAN_STANDART,
     "reportes": PLAN_STANDART,
-    "usuarios": PLAN_STANDART,
-    # Módulo exclusivo del plan 'pro'
-    "auditoria_movil": PLAN_PRO,
+    # Módulo exclusivo del Plan Ultra
+    "auditoria_movil": PLAN_ULTRA,
 }
 
 _SECRETO_HW = b"BillZen-ERP-HardwareLock-v1-2026-Salt"
@@ -126,11 +146,37 @@ def generar_hardware_id(forzar_recalculo: bool = False) -> str:
 
 def _normalizar_plan(plan: str) -> str:
     limpio = (plan or "").strip().lower()
-    if limpio in ("standard", "estandar", "estándar"):
+    if limpio in ("standard", "standart", "estandar", "estándar", "plus"):
         return PLAN_STANDART
-    if limpio in ("básico",):
+    if limpio in ("ultra", "pro", "premium"):
+        return PLAN_ULTRA
+    if limpio in ("basico", "básico", "free"):
         return PLAN_BASICO
-    return limpio if limpio in PLANES_VALIDOS else PLAN_BASICO
+    return PLAN_BASICO
+
+
+def nombre_legible_plan(plan: str | None = None) -> str:
+    p = _normalizar_plan(plan or obtener_plan_actual())
+    return NOMBRES_PLAN.get(p, "Plan Básico")
+
+
+def etiqueta_corta_plan(plan: str | None = None) -> str:
+    p = _normalizar_plan(plan or obtener_plan_actual())
+    return ETIQUETAS_CORTAS_PLAN.get(p, "BÁSICO")
+
+
+def tiene_facturacion_electronica(plan: str | None = None) -> bool:
+    """El Plan Básico solo emite tirilla POS local; Standard y Ultra incluyen Facturación Electrónica DIAN."""
+    p = _normalizar_plan(plan or obtener_plan_actual())
+    return NIVELES_PLAN.get(p, 1) >= NIVELES_PLAN[PLAN_STANDART]
+
+
+def max_cajeros_permitidos(plan: str | None = None) -> int | None:
+    """El Plan Básico permite máximo 1 cajero activo (aparte del Admin); Standard y Ultra son ilimitados."""
+    p = _normalizar_plan(plan or obtener_plan_actual())
+    if p == PLAN_BASICO:
+        return 1
+    return None
 
 
 def _firmar_registro_licencia(email: str, hw_id_hash: str, plan: str) -> str:
@@ -382,8 +428,61 @@ def activar_licencia_online(email: str, password: str, hw_id: str | None = None)
 
 
 # ==============================================================================
-# FEATURE TOGGLING (CAMALEÓN UI)
+# FEATURE TOGGLING (CAMALEÓN UI) Y SINCRONIZACIÓN DE CAMBIO DE PLAN
 # ==============================================================================
+def sincronizar_plan_con_nube(timeout_seg: float = 2.5) -> dict:
+    """Consulta silenciosamente a la API (`/api/plan/estado`) si el usuario mejoró o cambió su plan
+    en la página web. Si hay internet y el plan cambió en Neon.tech, actualiza el SQLite local
+    y recalcula su firma HMAC. Si no hay internet, conserva el plan local (Offline-First)."""
+    est_local = verificar_licencia_local()
+    if not est_local.get("valido"):
+        return {"actualizado": False, "plan": PLAN_BASICO, "anterior": None}
+
+    plan_anterior = est_local["plan"]
+    email_guardado = est_local.get("email") or ""
+    hw_actual = est_local.get("hw_id") or generar_hardware_id()
+
+    nit_emp = ""
+    try:
+        emp = consultar_uno("SELECT nit FROM empresa WHERE id_empresa = 1")
+        if emp and emp.get("nit"):
+            nit_emp = str(emp["nit"]).strip()
+    except Exception:
+        pass
+
+    qs = urllib.parse.urlencode({
+        "hardware_id": hw_actual,
+        "email": email_guardado,
+        "nit": nit_emp,
+    })
+
+    base_remota = URL_API_LICENCIA.rsplit("/licencia/activar", 1)[0]
+    urls_estado = [f"{base_remota}/plan/estado?{qs}"]
+    if "bill-zen-users.vercel.app" in URL_API_LICENCIA:
+        urls_estado.append(f"http://127.0.0.1:8000/api/plan/estado?{qs}")
+
+    for url in urls_estado:
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={"Accept": "application/json", "User-Agent": "BillZenERP-Desktop/1.0"},
+                method="GET",
+            )
+            with urllib.request.urlopen(req, timeout=timeout_seg) as resp:
+                datos = json.loads(resp.read().decode("utf-8"))
+            plan_nube = datos.get("plan_adquirido") or datos.get("plan")
+            if plan_nube:
+                plan_norm = _normalizar_plan(plan_nube)
+                if plan_norm != plan_anterior:
+                    guardar_licencia_local(email_guardado, hw_actual, plan_norm)
+                    return {"actualizado": True, "plan": plan_norm, "anterior": plan_anterior}
+                return {"actualizado": False, "plan": plan_anterior, "anterior": plan_anterior}
+        except Exception:
+            continue
+
+    return {"actualizado": False, "plan": plan_anterior, "anterior": plan_anterior}
+
+
 def obtener_plan_actual() -> str:
     """Devuelve el plan comercial activo en SQLite (`'basico'`, `'standart'` o `'pro'`)."""
     est = verificar_licencia_local()
@@ -402,10 +501,10 @@ def plan_requerido_para(clave_modulo: str) -> str:
     minimo = PLAN_MINIMO_MODULO.get(clave_modulo, PLAN_BASICO)
     nombres = {
         PLAN_BASICO: "Básico",
-        PLAN_STANDART: "Standart",
-        PLAN_PRO: "Pro",
+        PLAN_STANDART: "Standard",
+        PLAN_ULTRA: "Ultra",
     }
-    return nombres.get(minimo, "Pro")
+    return nombres.get(minimo, "Ultra")
 
 
 def requiere_plan(plan_minimo: str):

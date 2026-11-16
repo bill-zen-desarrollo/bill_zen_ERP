@@ -124,7 +124,7 @@ CREATE TABLE IF NOT EXISTS licencia_sistema (
     id_licencia      INTEGER PRIMARY KEY CHECK (id_licencia = 1),
     email_cuenta     TEXT NOT NULL,
     hw_id_hash       TEXT NOT NULL,
-    plan_adquirido   TEXT NOT NULL CHECK (plan_adquirido IN ('basico', 'standart', 'pro')),
+    plan_adquirido   TEXT NOT NULL CHECK (plan_adquirido IN ('basico', 'standart', 'ultra', 'pro')),
     firma_integridad TEXT NOT NULL,
     activado_en      TEXT DEFAULT (datetime('now','localtime'))
 );
@@ -154,6 +154,36 @@ def inicializar_base_datos():
     restaurar_si_falta()
     with transaccion() as con:
         con.executescript(ESQUEMA)
+        # Migración automática si licencia_sistema tenía un CHECK antiguo sin 'ultra'
+        info_lic = con.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='licencia_sistema'"
+        ).fetchone()
+        if info_lic and info_lic[0] and "'ultra'" not in info_lic[0]:
+            fila_ant = con.execute("SELECT * FROM licencia_sistema WHERE id_licencia = 1").fetchone()
+            con.execute("DROP TABLE licencia_sistema")
+            con.executescript(
+                """CREATE TABLE IF NOT EXISTS licencia_sistema (
+                    id_licencia      INTEGER PRIMARY KEY CHECK (id_licencia = 1),
+                    email_cuenta     TEXT NOT NULL,
+                    hw_id_hash       TEXT NOT NULL,
+                    plan_adquirido   TEXT NOT NULL CHECK (plan_adquirido IN ('basico', 'standart', 'ultra', 'pro')),
+                    firma_integridad TEXT NOT NULL,
+                    activado_en      TEXT DEFAULT (datetime('now','localtime'))
+                );"""
+            )
+            if fila_ant:
+                con.execute(
+                    """INSERT INTO licencia_sistema (id_licencia, email_cuenta, hw_id_hash, plan_adquirido, firma_integridad, activado_en)
+                       VALUES (1, ?, ?, ?, ?, ?)""",
+                    (
+                        fila_ant["email_cuenta"],
+                        fila_ant["hw_id_hash"],
+                        fila_ant["plan_adquirido"],
+                        fila_ant["firma_integridad"],
+                        fila_ant["activado_en"],
+                    ),
+                )
+
         if con.execute("SELECT COUNT(*) FROM categorias").fetchone()[0] == 0:
             con.executemany(
                 "INSERT INTO categorias (nombre, descripcion, iva_porcentaje) VALUES (?,?,?)",

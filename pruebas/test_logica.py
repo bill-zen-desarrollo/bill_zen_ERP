@@ -24,6 +24,7 @@ class PruebasBillZen(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         inicializar_base_datos()
+        licencia.guardar_licencia_local("admin@tiendazen.co", licencia.generar_hardware_id(), "ultra")
         empresa_logic.registrar_empresa({"nit": "900.123.456-7", "razon_social": "Tienda Zen"})
         auth_logic.registrar_primer_admin("admin", "Administrador", "Clave1234", "Clave1234")
         auth_logic.iniciar_sesion("admin", "Clave1234")
@@ -311,13 +312,25 @@ class PruebasBillZen(unittest.TestCase):
             srv.shutdown()
             srv.server_close()
 
-        # 4. Feature Toggling según plan ('basico' vs 'standart' vs 'pro')
+        # 4. Feature Toggling según plan ('basico' vs 'standart' vs 'ultra')
         self.assertTrue(licencia.permite_modulo("facturacion", "basico"))
+        self.assertTrue(licencia.permite_modulo("usuarios", "basico"))
         self.assertFalse(licencia.permite_modulo("contabilidad", "basico"))
+        self.assertFalse(licencia.permite_modulo("reportes", "basico"))
         self.assertFalse(licencia.permite_modulo("auditoria_movil", "basico"))
+        self.assertFalse(licencia.tiene_facturacion_electronica("basico"))
+        self.assertEqual(licencia.max_cajeros_permitidos("basico"), 1)
+
+        # En Plan Básico ya hay cajeros activos, por lo que no permite crear otro más
+        with self.assertRaises(ErrorValidacion):
+            ul.crear_usuario("caja_extra", "Cajero Extra", "Cajero123", "Cajero123")
+
         self.assertTrue(licencia.permite_modulo("contabilidad", "standart"))
+        self.assertTrue(licencia.permite_modulo("reportes", "standart"))
+        self.assertTrue(licencia.tiene_facturacion_electronica("standart"))
+        self.assertIsNone(licencia.max_cajeros_permitidos("standart"))
         self.assertFalse(licencia.permite_modulo("auditoria_movil", "standart"))
-        self.assertTrue(licencia.permite_modulo("auditoria_movil", "pro"))
+        self.assertTrue(licencia.permite_modulo("auditoria_movil", "ultra"))
 
         # 5. Anticlones USB: si el hw_id_hash en SQLite pertenece a otro PC, bloquea de inmediato
         with transaccion() as con:
@@ -326,16 +339,16 @@ class PruebasBillZen(unittest.TestCase):
         self.assertFalse(est_clon["valido"])
         self.assertEqual(est_clon["motivo"], "HARDWARE_DIFERENTE")
 
-        # 6. Anti-tampering SQLite: si alguien edita plan_adquirido='pro' en SQLite manualmente, invalida firma
+        # 6. Anti-tampering SQLite: si alguien edita plan_adquirido='ultra' en SQLite manualmente, invalida firma
         licencia.guardar_licencia_local("cliente@empresa.com", hw1, "basico")
         with transaccion() as con:
-            con.execute("UPDATE licencia_sistema SET plan_adquirido = 'pro' WHERE id_licencia = 1")
+            con.execute("UPDATE licencia_sistema SET plan_adquirido = 'ultra' WHERE id_licencia = 1")
         est_tamper = licencia.verificar_licencia_local()
         self.assertFalse(est_tamper["valido"])
         self.assertEqual(est_tamper["motivo"], "LICENCIA_ADULTERADA")
 
-        # Restaurar licencia Pro válida
-        licencia.guardar_licencia_local("cliente@empresa.com", hw1, "pro")
+        # Restaurar licencia Ultra válida
+        licencia.guardar_licencia_local("cliente@empresa.com", hw1, "ultra")
         self.assertTrue(licencia.verificar_licencia_local()["valido"])
 
 

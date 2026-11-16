@@ -1,4 +1,5 @@
 """Recibo de factura: vista en pantalla con botón Imprimir (abre HTML en el navegador)."""
+import hashlib
 import os
 import tempfile
 import webbrowser
@@ -7,11 +8,30 @@ from html import escape
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
+from logica import licencia
 from logica.empresa_logic import obtener_empresa
 from ui import tema
 
 
+def _generar_cufe(f, emp) -> str:
+    semilla = f"{emp.get('nit','')}|{f['numero']}|{f['fecha']}|{f['total']:.2f}|DIAN-BILLZEN"
+    return hashlib.sha256(semilla.encode("utf-8")).hexdigest()
+
+
 def _html(f, emp):
+    es_electronica = licencia.tiene_facturacion_electronica()
+    cufe = _generar_cufe(f, emp) if es_electronica else ""
+    titulo_doc = (
+        f"Factura Electrónica de Venta {escape(f['numero'])}"
+        if es_electronica
+        else f"Recibo POS de Venta {escape(f['numero'])} (Sin Facturación Electrónica DIAN)"
+    )
+    bloque_dian = (
+        f"<div class='sub' style='margin-top:10px;word-break:break-all;'>"
+        f"<b>✓ Factura Electrónica DIAN Validada</b><br>CUFE: {cufe}</div>"
+        if es_electronica
+        else "<div class='sub' style='margin-top:10px;'>Documento equivalente POS local (Plan Básico — No constituye Factura Electrónica DIAN)</div>"
+    )
     filas = "".join(
         f"<tr><td>{escape(d['descripcion'])}</td><td class='r'>{d['cantidad']}</td>"
         f"<td class='r'>{tema.moneda(d['precio_unitario'])}</td>"
@@ -35,7 +55,7 @@ th{{background:#1F5C46;color:#fff;padding:8px;text-align:left}} td{{padding:7px 
 <div class="sub">NIT {escape(emp.get('nit',''))} · {escape(emp.get('regimen') or '')}<br>
 {escape(emp.get('direccion') or '')} · Tel. {escape(emp.get('telefono') or '')}</div></div>
 {anulada}
-<b>Factura de venta {escape(f['numero'])}</b><br>
+<b>{titulo_doc}</b><br>
 <span class="sub">Fecha: {escape(f['fecha'])} · Cajero: {escape(f['cajero'])}<br>
 Cliente: {escape(f['cliente_nombre'])} ({escape(f['cliente_doc'])}) · Pago: {escape(f['metodo_pago'])}</span>
 <table><tr><th>Descripción</th><th class="r">Cant.</th><th class="r">Precio</th><th class="r">IVA</th><th class="r">Total</th></tr>{filas}</table>
@@ -45,6 +65,7 @@ Cliente: {escape(f['cliente_nombre'])} ({escape(f['cliente_doc'])}) · Pago: {es
 <tr class="gran"><td>TOTAL</td><td class="r">{tema.moneda(f['total'])}</td></tr>
 <tr><td>Recibido</td><td class="r">{tema.moneda(f['recibido'])}</td></tr>
 <tr><td>Cambio</td><td class="r">{tema.moneda(max(f['recibido'] - f['total'], 0))}</td></tr></table>
+{bloque_dian}
 <div class="pie">¡Gracias por tu compra!<br>Generado con Bill Zen ERP</div>
 <script>window.onload=function(){{setTimeout(function(){{window.print()}},400)}}</script>
 </body></html>"""
@@ -73,8 +94,15 @@ class VentanaFactura(ttk.Toplevel):
         ttk.Label(marco, text=f"NIT {emp.get('nit', '')}", style="Subtitulo.TLabel").pack(anchor=W)
         ttk.Separator(marco).pack(fill=X, pady=8)
         estado = "  (ANULADA)" if factura["estado"] == "ANULADA" else ""
-        ttk.Label(marco, text=f"Factura {factura['numero']}{estado}", style="Fondo.TLabel",
+        es_electronica = licencia.tiene_facturacion_electronica()
+        tipo_lbl = "Factura Electrónica DIAN" if es_electronica else "Recibo POS Local (Sin DIAN)"
+        ttk.Label(marco, text=f"{tipo_lbl} {factura['numero']}{estado}", style="Fondo.TLabel",
                   font=(tema.FUENTE, 12, "bold"), foreground=tema.ROJO if estado else tema.VERDE).pack(anchor=W)
+        if es_electronica:
+            cufe_corto = _generar_cufe(factura, emp)[:36] + "..."
+            ttk.Label(marco, text=f"✓ CUFE DIAN: {cufe_corto}", style="Subtitulo.TLabel", foreground=tema.VERDE_CLARO, font=(tema.FUENTE, 8, "bold")).pack(anchor=W)
+        else:
+            ttk.Label(marco, text="Plan Básico: Tirilla POS local (Actualiza a Standard o Ultra para Facturación Electrónica DIAN)", style="Subtitulo.TLabel", font=(tema.FUENTE, 8)).pack(anchor=W)
         ttk.Label(marco, text=f"{factura['fecha']}  ·  Cajero: {factura['cajero']}\nCliente: {factura['cliente_nombre']}  ·  Pago: {factura['metodo_pago']}",
                   style="Subtitulo.TLabel").pack(anchor=W, pady=(2, 8))
 

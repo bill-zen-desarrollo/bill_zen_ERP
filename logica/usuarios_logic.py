@@ -1,5 +1,6 @@
 """Administración de usuarios (solo administradores)."""
 from database.conexion import consultar, consultar_uno, transaccion
+from logica import licencia
 from logica.seguridad import (ROL_ADMIN, ROL_CAJERO, ErrorValidacion, Sesion, auditar,
                               hash_password, requiere_rol, validar_password, validar_username)
 
@@ -24,6 +25,17 @@ def crear_usuario(username, nombre, password, confirmacion):
     if consultar_uno("SELECT 1 AS x FROM usuarios WHERE username = ?", (username,)):
         raise ErrorValidacion("Ese nombre de usuario ya existe.")
     with transaccion() as con:
+        max_caj = licencia.max_cajeros_permitidos()
+        if max_caj is not None:
+            actuales = con.execute(
+                "SELECT COUNT(*) FROM usuarios WHERE id_rol = ? AND activo = 1",
+                (ROL_CAJERO,),
+            ).fetchone()[0]
+            if actuales >= max_caj:
+                raise ErrorValidacion(
+                    f"El Plan Básico permite máximo {max_caj} usuario cajero activo (aparte del Administrador). "
+                    "Actualiza al Plan Standard o Plan Ultra para registrar cajeros ilimitados."
+                )
         con.execute(
             "INSERT INTO usuarios (username, nombre_completo, password_hash, id_rol) VALUES (?,?,?,?)",
             (username, nombre, hash_password(password), id_rol),
@@ -54,6 +66,18 @@ def actualizar_usuario(id_usuario, nombre, activo):
             
         if id_rol == ROL_ADMIN and not activo and _admins_activos(con, id_usuario) == 0:
             raise ErrorValidacion("Debe existir al menos un administrador activo.")
+        if id_rol == ROL_CAJERO and activo:
+            max_caj = licencia.max_cajeros_permitidos()
+            if max_caj is not None:
+                otros_cajeros = con.execute(
+                    "SELECT COUNT(*) FROM usuarios WHERE id_rol = ? AND activo = 1 AND id_usuario <> ?",
+                    (ROL_CAJERO, id_usuario),
+                ).fetchone()[0]
+                if otros_cajeros >= max_caj:
+                    raise ErrorValidacion(
+                        f"El Plan Básico permite máximo {max_caj} usuario cajero activo (aparte del Administrador). "
+                        "Actualiza al Plan Standard o Plan Ultra para tener múltiples cajeros activos."
+                    )
         con.execute("UPDATE usuarios SET nombre_completo=?, activo=? WHERE id_usuario=?",
                     (nombre, int(activo), id_usuario))
         auditar("EDITAR_USUARIO", f"id={id_usuario} activo={activo}", con)
