@@ -7,6 +7,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter
 
+import tkinter as tk
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
@@ -95,6 +96,29 @@ class Vista(ttk.Frame):
             w = cmp.tarjeta_kpi(self.fila_kpi, t, acento=col)
             w.grid(row=0, column=i, sticky=NSEW, padx=(0 if i == 0 else 8, 0))
             self.kpis[k] = w
+
+        # Banner de aviso en el Dashboard cuando hay cuentas fijas próximas a vencer o vencidas
+        if licencia.permite_modulo("contabilidad"):
+            alertas_cf = rl.alertas_gastos_fijos()
+            if alertas_cf["hay_alertas"]:
+                aviso_f = tk.Frame(self, bg="#FDF0ED", highlightthickness=1, highlightbackground=tema.ROJO)
+                aviso_f.pack(fill=X, pady=(10, 0))
+                resumen_cf = ", ".join(f"{x['concepto']} ({x['etiqueta_estado']})" for x in alertas_cf["items"][:3])
+                tk.Label(
+                    aviso_f,
+                    text=f"🔔 Recordatorio de Cuentas Fijas: {resumen_cf}",
+                    bg="#FDF0ED",
+                    fg=tema.ROJO,
+                    font=(tema.FUENTE, 9, "bold"),
+                ).pack(side=LEFT, padx=12, pady=6)
+                if principal and hasattr(principal, "ir_a"):
+                    ttk.Button(
+                        aviso_f,
+                        text="Ir a Contabilidad →",
+                        style="Peligro.TButton",
+                        command=lambda: principal.ir_a("contabilidad"),
+                        padding=(8, 3),
+                    ).pack(side=RIGHT, padx=10, pady=4)
 
         graficos = ttk.Frame(self)
         graficos.pack(fill=BOTH, expand=YES, pady=(12, 0))

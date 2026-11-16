@@ -103,13 +103,33 @@ CREATE TABLE IF NOT EXISTS detalles_factura (
 );
 
 CREATE TABLE IF NOT EXISTS gastos (
-    id_gasto    INTEGER PRIMARY KEY AUTOINCREMENT,
-    fecha       TEXT NOT NULL,
-    concepto    TEXT NOT NULL,
-    categoria   TEXT NOT NULL,
-    valor       REAL NOT NULL CHECK (valor > 0),
-    id_usuario  INTEGER NOT NULL REFERENCES usuarios(id_usuario),
-    creado_en   TEXT DEFAULT (datetime('now','localtime'))
+    id_gasto          INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha             TEXT NOT NULL,
+    concepto          TEXT NOT NULL,
+    categoria         TEXT NOT NULL,
+    valor             REAL NOT NULL CHECK (valor > 0),
+    proveedor         TEXT DEFAULT '',
+    metodo_pago       TEXT DEFAULT 'Efectivo',
+    comprobante       TEXT DEFAULT '',
+    estado            TEXT NOT NULL DEFAULT 'PAGADO' CHECK (estado IN ('PAGADO', 'PENDIENTE')),
+    fecha_vencimiento TEXT,
+    id_usuario        INTEGER NOT NULL REFERENCES usuarios(id_usuario),
+    creado_en         TEXT DEFAULT (datetime('now','localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS gastos_fijos (
+    id_gasto_fijo     INTEGER PRIMARY KEY AUTOINCREMENT,
+    concepto          TEXT NOT NULL,
+    descripcion       TEXT DEFAULT '',
+    categoria         TEXT NOT NULL,
+    proveedor         TEXT DEFAULT '',
+    valor_estimado    REAL NOT NULL CHECK (valor_estimado > 0),
+    dia_pago          INTEGER NOT NULL CHECK (dia_pago >= 1 AND dia_pago <= 31),
+    dias_anticipacion INTEGER NOT NULL DEFAULT 5 CHECK (dias_anticipacion >= 1 AND dias_anticipacion <= 15),
+    metodo_pago       TEXT DEFAULT 'Transferencia',
+    ultimo_mes_pagado TEXT DEFAULT '',
+    activo            INTEGER NOT NULL DEFAULT 1,
+    creado_en         TEXT DEFAULT (datetime('now','localtime'))
 );
 
 CREATE TABLE IF NOT EXISTS auditoria (
@@ -183,6 +203,20 @@ def inicializar_base_datos():
                         fila_ant["activado_en"],
                     ),
                 )
+
+        # Migración automática de nuevas columnas contables en la tabla gastos
+        cols_gastos = {
+            r[1] for r in con.execute("PRAGMA table_info(gastos)").fetchall()
+        }
+        for col_sql, nombre_col in (
+            ("ALTER TABLE gastos ADD COLUMN proveedor TEXT DEFAULT ''", "proveedor"),
+            ("ALTER TABLE gastos ADD COLUMN metodo_pago TEXT DEFAULT 'Efectivo'", "metodo_pago"),
+            ("ALTER TABLE gastos ADD COLUMN comprobante TEXT DEFAULT ''", "comprobante"),
+            ("ALTER TABLE gastos ADD COLUMN estado TEXT NOT NULL DEFAULT 'PAGADO'", "estado"),
+            ("ALTER TABLE gastos ADD COLUMN fecha_vencimiento TEXT", "fecha_vencimiento"),
+        ):
+            if nombre_col not in cols_gastos:
+                con.execute(col_sql)
 
         if con.execute("SELECT COUNT(*) FROM categorias").fetchone()[0] == 0:
             con.executemany(

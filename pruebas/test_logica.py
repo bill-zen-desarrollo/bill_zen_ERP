@@ -15,6 +15,7 @@ from logica import (
     licencia,
     mobile_server as ms,
     productos_logic as pl,
+    reportes_logic as rl,
     usuarios_logic as ul,
 )
 from logica.seguridad import ErrorPermiso, ErrorValidacion, Sesion
@@ -350,6 +351,46 @@ class PruebasBillZen(unittest.TestCase):
         # Restaurar licencia Ultra válida
         licencia.guardar_licencia_local("cliente@empresa.com", hw1, "ultra")
         self.assertTrue(licencia.verificar_licencia_local()["valido"])
+
+    def test_contabilidad_egresos_cuentas_por_pagar_flujo_caja_e_iva(self):
+        from datetime import date
+
+        auth_logic.iniciar_sesion("admin", "Clave1234")
+        hoy = date.today().isoformat()
+
+        # 1. Registrar recibo de servicio público PENDIENTE por pagar
+        rl.registrar_gasto(
+            fecha=hoy,
+            concepto="Recibo de Energía Enel",
+            categoria="Servicios públicos (Agua/Luz/Gas/Internet)",
+            valor="180.000",
+            proveedor="Enel Codensa",
+            metodo_pago="Transferencia",
+            comprobante="ENEL-9921",
+            estado="PENDIENTE",
+        )
+        pendientes = rl.listar_gastos(hoy, hoy, estado="PENDIENTE", texto="Enel")
+        self.assertEqual(len(pendientes), 1)
+        id_gasto = pendientes[0]["id_gasto"]
+
+        # 2. Estado de resultados refleja cuentas por pagar y punto de equilibrio
+        pyg_antes = rl.estado_resultados(hoy, hoy)
+        self.assertEqual(pyg_antes["gastos_pendientes"], 180000)
+        self.assertEqual(pyg_antes["conteo_pendientes"], 1)
+        self.assertGreaterEqual(pyg_antes["punto_equilibrio"], 0)
+
+        # 3. Marcar como PAGADO actualiza estado y alimenta el flujo de caja/bancos
+        rl.marcar_gasto_pagado(id_gasto, metodo_pago="Efectivo")
+        pyg_despues = rl.estado_resultados(hoy, hoy)
+        self.assertEqual(pyg_despues["gastos_pendientes"], 0)
+        self.assertEqual(pyg_despues["gastos_pagados"], 180000)
+
+        flujo = rl.flujo_caja_y_bancos(hoy, hoy)
+        self.assertEqual(flujo["egresos_efectivo"], 180000)
+        self.assertIn("desglose_por_metodo", flujo)
+
+        ivas = rl.resumen_iva_dian(hoy, hoy)
+        self.assertIsInstance(ivas, list)
 
 
 if __name__ == "__main__":
