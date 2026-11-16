@@ -115,3 +115,44 @@ def vincular_busqueda(widget_padre, entrada, callback, espera=250):
         timer[0] = widget_padre.after(espera, callback)
 
     entrada.bind("<KeyRelease>", _al_escribir)
+
+
+def vincular_tooltip(widget, texto: str):
+    """Muestra un Tooltip con la paleta corporativa Bill Zen al pasar el cursor (incluso en botones disabled)."""
+    ventana_tt = [None]
+
+    def _mostrar(_evento=None):
+        if ventana_tt[0] is not None or not widget.winfo_exists():
+            return
+        x = widget.winfo_rootx() + 24
+        y = widget.winfo_rooty() + widget.winfo_height() + 4
+        tw = tk.Toplevel(widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+        borde = tk.Frame(tw, bg=tema.DORADO, padx=1, pady=1)
+        borde.pack()
+        tk.Label(
+            borde,
+            text=texto,
+            bg=tema.VERDE_OSCURO,
+            fg=tema.BEIGE,
+            font=(tema.FUENTE, 9),
+            justify="left",
+            padx=10,
+            pady=6,
+            wraplength=280,
+        ).pack()
+        ventana_tt[0] = tw
+
+    def _ocultar(_evento=None):
+        if ventana_tt[0] is not None:
+            try:
+                ventana_tt[0].destroy()
+            except Exception:
+                pass
+            ventana_tt[0] = None
+
+    widget.bind("<Enter>", _mostrar, add="+")
+    widget.bind("<Leave>", _ocultar, add="+")
+    widget.bind("<Destroy>", _ocultar, add="+")
+

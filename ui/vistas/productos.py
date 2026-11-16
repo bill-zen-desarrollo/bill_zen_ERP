@@ -9,11 +9,14 @@ from ui import tema
 
 
 class Vista(ttk.Frame):
+    TODAS_CATS = "Todas las categorías"
+
     def __init__(self, padre, principal):
         super().__init__(padre)
         self.id_editando = None
         self.categorias = pl.listar_categorias()
         self.cat_por_nombre = {f"{c['nombre']}  (IVA {c['iva_porcentaje']:.0f}%)": c for c in self.categorias}
+        self.cat_filtro_mapa = {c["nombre"]: c["id_categoria"] for c in self.categorias}
 
         cmp.encabezado(self, "Productos", "Crea y administra tu catálogo. El IVA se aplica según la categoría.").pack(anchor=W, pady=(0, 12))
         cuerpo = ttk.Frame(self)
@@ -26,12 +29,33 @@ class Vista(ttk.Frame):
         self.e_buscar = ttk.Entry(barra)
         self.e_buscar.pack(side=LEFT, fill=X, expand=YES)
         cmp.vincular_busqueda(self, self.e_buscar, self.refrescar)
+
+        self.cb_filtro_cat = ttk.Combobox(
+            barra,
+            values=[self.TODAS_CATS] + list(self.cat_filtro_mapa.keys()),
+            state="readonly",
+            width=22,
+        )
+        self.cb_filtro_cat.set(self.TODAS_CATS)
+        self.cb_filtro_cat.pack(side=LEFT, padx=(8, 0))
+        self.cb_filtro_cat.bind("<<ComboboxSelected>>", lambda e: self.refrescar())
+
         self.var_inactivos = ttk.BooleanVar(value=False)
         ttk.Checkbutton(barra, text="Ver inactivos", variable=self.var_inactivos, command=self.refrescar).pack(side=LEFT, padx=10)
-        ttk.Button(barra, text="📥 Subir Excel", style="Info.TButton", command=self.importar_excel).pack(side=RIGHT, padx=(10, 0))
-        ttk.Button(barra, text="📄 Bajar plantilla", style="Suave.TButton", command=self.descargar_plantilla).pack(side=RIGHT, padx=(10, 0))
-        marco, self.tv = cmp.tabla(izq, [("codigo", "Código", 100, W), ("nombre", "Producto", 220, W), ("cat", "Categoría", 130, W),
-                                         ("precio", "Precio", 90, E), ("costo", "Costo", 90, E), ("stock", "Stock", 60, E), ("estado", "Estado", 70, W)], altura=17)
+        ttk.Button(barra, text="📥 Subir Excel", style="Info.TButton", command=self.importar_excel).pack(side=RIGHT, padx=(8, 0))
+        ttk.Button(barra, text="📄 Bajar plantilla", style="Suave.TButton", command=self.descargar_plantilla).pack(side=RIGHT, padx=(8, 0))
+        marco, self.tv = cmp.tabla(
+            izq,
+            [
+                ("codigo", "Código", 105, W),
+                ("nombre", "Producto", 240, W),
+                ("cat", "Categoría", 145, W),
+                ("precio", "Precio", 95, E),
+                ("costo", "Costo", 95, E),
+                ("stock", "Stock", 65, E),
+            ],
+            altura=17,
+        )
         marco.pack(fill=BOTH, expand=YES)
         self.tv.bind("<<TreeviewSelect>>", lambda e: self.cargar_seleccion())
 
@@ -57,8 +81,11 @@ class Vista(ttk.Frame):
         
         fila = ttk.Frame(c, style="Tarjeta.TFrame")
         fila.pack(fill=X, pady=(0, 10))
-        fila.columnconfigure(0, weight=1)
-        self.e_costo = cmp.campo(fila, "Precio base (sin IVA) *", 0, 0, 12)
+        fila.columnconfigure((0, 1), weight=1)
+        self.e_costo = cmp.campo(fila, "Costo proveedor *", 0, 0, 12)
+        self.e_precio = cmp.campo(fila, "Precio de venta *", 0, 1, 12)
+        self.e_costo.bind("<KeyRelease>", lambda e: self._pista_iva())
+        self.e_precio.bind("<KeyRelease>", lambda e: self._pista_iva())
         
         fila2 = ttk.Frame(c, style="Tarjeta.TFrame")
         fila2.pack(fill=X, pady=(0, 10))
@@ -127,22 +154,71 @@ class Vista(ttk.Frame):
 
     def _pista_iva(self):
         cat = self.cat_por_nombre.get(self.cb_cat.get())
-        if cat:
-            self.lbl_iva.configure(text="Producto exento de IVA (canasta familiar)" if cat["iva_porcentaje"] == 0
-                                   else f"Se factura con IVA del {cat['iva_porcentaje']:.0f}%")
+        iva = cat["iva_porcentaje"] if cat else 0
+        txt_iva = "Exento de IVA (0%)" if iva == 0 else f"IVA incluido del {iva:.0f}%"
+        try:
+            costo = pl._numero(self.e_costo.get() or 0, "Costo")
+            precio = pl._numero(self.e_precio.get() or 0, "Precio")
+        except ErrorValidacion:
+            costo, precio = 0, 0
+
+        if precio > 0 and costo > 0:
+            if precio < costo:
+                self.lbl_iva.configure(
+                    text=f"⚠ El precio de venta ({tema.moneda(precio)}) es menor al costo ({tema.moneda(costo)})",
+                    foreground=tema.ROJO,
+                )
+                return
+            base_neta = precio / (1 + iva / 100)
+            ganancia = base_neta - costo
+            margen = (ganancia / costo * 100) if costo else 0
+            color = tema.VERDE_CLARO if ganancia > 0 else tema.ROJO
+            self.lbl_iva.configure(
+                text=f"{txt_iva} · Ganancia neta/u: {tema.moneda(ganancia)} ({margen:.0f}%)",
+                foreground=color,
+            )
+        elif cat:
+            self.lbl_iva.configure(text=txt_iva, foreground=tema.VERDE_CLARO)
+        else:
+            self.lbl_iva.configure(text="", foreground=tema.VERDE_CLARO)
 
     def refrescar(self):
-        filas = pl.listar_productos(self.e_buscar.get().strip(), solo_activos=not self.var_inactivos.get())
+        cat_sel = self.cb_filtro_cat.get()
+        id_cat = self.cat_filtro_mapa.get(cat_sel)
+        ver_inactivos = self.var_inactivos.get()
+        filas = pl.listar_productos(
+            self.e_buscar.get().strip(),
+            solo_activos=not ver_inactivos,
+            id_categoria=id_cat,
+            solo_inactivos=ver_inactivos,
+        )
         self.filas = {str(p["id_producto"]): p for p in filas}
-        cmp.llenar_tabla(self.tv, [(p["id_producto"], (p["codigo"], p["nombre"], p["categoria"], tema.moneda(p["precio"]),
-                                                       tema.moneda(p["costo"]), p["stock"], "Activo" if p["activo"] else "Inactivo")) for p in filas],
-                         lambda i, v: ("anulada",) if v[6] == "Inactivo" else (("alerta",) if self.filas[str(i)]["stock"] <= self.filas[str(i)]["stock_minimo"] else ()))
+        cmp.llenar_tabla(
+            self.tv,
+            [
+                (
+                    p["id_producto"],
+                    (
+                        p["codigo"],
+                        p["nombre"],
+                        p["categoria"],
+                        tema.moneda(p["precio"]),
+                        tema.moneda(p["costo"]),
+                        p["stock"],
+                    ),
+                )
+                for p in filas
+            ],
+            lambda i, _v: ("anulada",)
+            if not self.filas[str(i)]["activo"]
+            else (("alerta",) if self.filas[str(i)]["stock"] <= self.filas[str(i)]["stock_minimo"] else ()),
+        )
 
     def limpiar(self):
         self.id_editando = None
         self.lbl_modo.configure(text="Nuevo producto")
         self.btn_guardar.configure(text="Crear producto")
-        for e in (self.e_codigo, self.e_nombre, self.e_costo, self.e_stock):
+        for e in (self.e_codigo, self.e_nombre, self.e_costo, self.e_precio, self.e_stock):
             e.delete(0, END)
         self.e_minimo.delete(0, END)
         self.e_minimo.insert(0, "5")
@@ -162,23 +238,34 @@ class Vista(ttk.Frame):
         self.id_editando = p["id_producto"]
         self.lbl_modo.configure(text=f"Editando: {p['nombre']}")
         self.btn_guardar.configure(text="Guardar cambios")
-        for e, v in ((self.e_codigo, p["codigo"]), (self.e_nombre, p["nombre"]), (self.e_costo, f"{p['costo']:.0f}"),
-                     (self.e_minimo, p["stock_minimo"])):
+        for e, v in (
+            (self.e_codigo, p["codigo"]),
+            (self.e_nombre, p["nombre"]),
+            (self.e_costo, f"{p['costo']:.0f}"),
+            (self.e_precio, f"{p['precio']:.0f}"),
+            (self.e_minimo, p["stock_minimo"]),
+        ):
             e.delete(0, END)
             e.insert(0, v)
         self.e_stock.delete(0, END)
         self.e_stock.insert(0, p["stock"])
         self.e_stock.configure(state=DISABLED)
-        self.lbl_nota.configure(text="El stock solo cambia con «Entrada de mercancía» (Inventario) o al facturar. El precio sí puedes actualizarlo aquí.")
+        self.lbl_nota.configure(text="El stock solo cambia con «Entrada de mercancía» (Inventario) o al facturar. Costo y precio de venta sí puedes actualizarlos aquí.")
         self.cb_cat.set(next(k for k, c in self.cat_por_nombre.items() if c["id_categoria"] == p["id_categoria"]))
         self._pista_iva()
         self.btn_estado.configure(state=NORMAL, text="Desactivar producto" if p["activo"] else "Reactivar producto")
 
     def guardar(self):
         cat = self.cat_por_nombre.get(self.cb_cat.get())
-        datos = {"codigo": self.e_codigo.get(), "nombre": self.e_nombre.get(), "id_categoria": cat["id_categoria"] if cat else None,
-                 "costo": self.e_costo.get(), "stock_minimo": self.e_minimo.get(),
-                 "stock_inicial": self.e_stock.get() if not self.id_editando else 0}
+        datos = {
+            "codigo": self.e_codigo.get(),
+            "nombre": self.e_nombre.get(),
+            "id_categoria": cat["id_categoria"] if cat else None,
+            "costo": self.e_costo.get(),
+            "precio": self.e_precio.get(),
+            "stock_minimo": self.e_minimo.get(),
+            "stock_inicial": self.e_stock.get() if not self.id_editando else 0,
+        }
         try:
             pl.guardar_producto(datos, self.id_editando)
         except ErrorValidacion as e:
@@ -203,7 +290,9 @@ class Vista(ttk.Frame):
     def _tras_categoria(self):
         self.categorias = pl.listar_categorias()
         self.cat_por_nombre = {f"{c['nombre']}  (IVA {c['iva_porcentaje']:.0f}%)": c for c in self.categorias}
+        self.cat_filtro_mapa = {c["nombre"]: c["id_categoria"] for c in self.categorias}
         self.cb_cat.configure(values=list(self.cat_por_nombre))
+        self.cb_filtro_cat.configure(values=[self.TODAS_CATS] + list(self.cat_filtro_mapa.keys()))
 
 
 class VentanaCategoria(ttk.Toplevel):

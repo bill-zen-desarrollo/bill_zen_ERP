@@ -29,8 +29,9 @@ def maneja_excepcion(exc_type, exc_value, exc_traceback):
 sys.excepthook = maneja_excepcion
 
 from database.setup_db import inicializar_base_datos
-from logica import auth_logic, empresa_logic, respaldo
+from logica import auth_logic, empresa_logic, licencia, respaldo
 from ui import tema
+from ui.activacion import VistaActivacion
 from ui.login import Login
 from ui.setup_wizard import AsistenteInicial
 from ui.shell import Principal
@@ -75,8 +76,20 @@ class BillZenApp:
         self.ventana.minsize(1100, 680)
         self.ventana.configure(background=tema.BEIGE)
         self.iniciar()
+        try:
+            self.ventana.lift()
+            self.ventana.attributes("-topmost", True)
+            self.ventana.after(250, lambda: self.ventana.attributes("-topmost", False))
+            self.ventana.focus_force()
+        except Exception:
+            pass
 
     def iniciar(self):
+        estado_lic = licencia.verificar_licencia_local()
+        if not estado_lic["valido"]:
+            VistaActivacion(self.ventana, estado_lic, al_activar=self.iniciar)
+            return
+
         if (not empresa_logic.empresa_registrada()
                 or not auth_logic.existe_admin()
                 or not auth_logic.tiene_preguntas_admin()):

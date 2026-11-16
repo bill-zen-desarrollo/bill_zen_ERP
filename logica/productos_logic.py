@@ -60,15 +60,17 @@ def guardar_categoria(nombre, descripcion, iva, id_categoria=None):
 
 # ---------- Productos ----------
 @requiere_rol(ROL_ADMIN, ROL_CAJERO)
-def listar_productos(texto="", solo_activos=True, id_categoria=None):
+def listar_productos(texto="", solo_activos=True, id_categoria=None, solo_inactivos=False):
     sql = """SELECT p.*, c.nombre AS categoria, c.iva_porcentaje
              FROM productos p JOIN categorias c ON c.id_categoria = p.id_categoria WHERE 1=1"""
     params = []
-    if solo_activos:
+    if solo_inactivos:
+        sql += " AND p.activo = 0"
+    elif solo_activos:
         sql += " AND p.activo = 1"
     if texto:
-        sql += " AND (p.nombre LIKE ? OR p.codigo LIKE ?)"
-        params += [f"%{texto}%", f"%{texto}%"]
+        sql += " AND (p.nombre LIKE ? OR p.codigo LIKE ? OR c.nombre LIKE ?)"
+        params += [f"%{texto}%", f"%{texto}%", f"%{texto}%"]
     if id_categoria:
         sql += " AND p.id_categoria = ?"
         params.append(id_categoria)
@@ -94,20 +96,24 @@ def guardar_producto(datos: dict, id_producto=None):
         raise ErrorValidacion("El código y el nombre son obligatorios.")
     if not datos.get("id_categoria"):
         raise ErrorValidacion("Selecciona una categoría.")
-    costo = _numero(datos.get("costo") or 0, "Costo / Precio sin IVA")
+    costo = _numero(datos.get("costo") or 0, "Costo del proveedor")
+    precio_raw = datos.get("precio")
+    if precio_raw in (None, ""):
+        raise ErrorValidacion("Ingresa el precio de venta al público.")
+    precio = _numero(precio_raw, "Precio de venta")
+    if precio <= 0:
+        raise ErrorValidacion("El precio de venta debe ser mayor que cero.")
+    if costo > 0 and precio < costo:
+        raise ErrorValidacion("El precio de venta no puede ser menor que el costo del proveedor.")
     stock_minimo = _numero(datos.get("stock_minimo") or 0, "Stock mínimo", entero=True)
     stock_inicial = _numero(datos.get("stock_inicial") or 0, "Stock inicial", entero=True)
 
     with transaccion() as con:
-        cat = con.execute("SELECT iva_porcentaje FROM categorias WHERE id_categoria=?", (datos["id_categoria"],)).fetchone()
-        iva = cat["iva_porcentaje"] if cat else 0
-        precio = costo * (1 + iva / 100)
-
         if con.execute("SELECT 1 FROM productos WHERE codigo=? AND id_producto<>?",
                        (codigo, id_producto or -1)).fetchone():
             raise ErrorValidacion("Ya existe un producto con ese código.")
         if id_producto:
-            anterior = con.execute("SELECT precio FROM productos WHERE id_producto=?", (id_producto,)).fetchone()
+            anterior = con.execute("SELECT precio, costo FROM productos WHERE id_producto=?", (id_producto,)).fetchone()
             con.execute(
                 """UPDATE productos SET codigo=?, nombre=?, id_categoria=?, costo=?, precio=?, stock_minimo=?
                    WHERE id_producto=?""",
@@ -116,6 +122,8 @@ def guardar_producto(datos: dict, id_producto=None):
             detalle = f"{codigo} {nombre}"
             if anterior and anterior["precio"] != precio:
                 detalle += f" | precio {anterior['precio']:.0f} → {precio:.0f}"
+            if anterior and anterior["costo"] != costo:
+                detalle += f" | costo {anterior['costo']:.0f} → {costo:.0f}"
             auditar("EDITAR_PRODUCTO", detalle, con)
             return id_producto
         else:
@@ -138,15 +146,19 @@ def cambiar_estado_producto(id_producto, activo):
         auditar("ESTADO_PRODUCTO", f"id={id_producto} activo={activo}", con)
 
 
-def _entrada(con, id_producto, cantidad, referencia, costo=None):
-    fila = con.execute("SELECT stock FROM productos WHERE id_producto=?", (id_producto,)).fetchone()
+def _entrada(con, id_producto, cantidad, referencia, costo=None, precio=None):
+    fila = con.execute("SELECT stock, costo, precio FROM productos WHERE id_producto=?", (id_producto,)).fetchone()
     if fila is None:
         raise ErrorValidacion("El producto no existe.")
     nuevo = fila["stock"] + cantidad
-    if costo is not None:
-        con.execute("UPDATE productos SET stock=?, costo=? WHERE id_producto=?", (nuevo, costo, id_producto))
-    else:
-        con.execute("UPDATE productos SET stock=? WHERE id_producto=?", (nuevo, id_producto))
+    nuevo_costo = fila["costo"] if costo is None else costo
+    nuevo_precio = fila["precio"] if precio is None else precio
+    if nuevo_costo > 0 and nuevo_precio < nuevo_costo:
+        raise ErrorValidacion("El precio de venta no puede quedar por debajo del costo del proveedor.")
+    con.execute(
+        "UPDATE productos SET stock=?, costo=?, precio=? WHERE id_producto=?",
+        (nuevo, nuevo_costo, nuevo_precio, id_producto),
+    )
     con.execute(
         """INSERT INTO movimientos_inventario (id_producto, tipo, cantidad, stock_final, referencia, id_usuario)
            VALUES (?, 'ENTRADA', ?, ?, ?, ?)""",
@@ -156,12 +168,13 @@ def _entrada(con, id_producto, cantidad, referencia, costo=None):
 
 
 @requiere_rol(ROL_ADMIN)
-def registrar_entrada(id_producto, cantidad, referencia="", costo=None):
+def registrar_entrada(id_producto, cantidad, referencia="", costo=None, precio=None):
     """Suma stock cuando llega mercancía. Única vía para incrementar inventario."""
     cantidad = _numero(cantidad, "Cantidad", entero=True, minimo=1)
-    costo = _numero(costo, "Costo unitario") if costo not in (None, "") else None
+    costo = _numero(costo, "Costo proveedor unitario") if costo not in (None, "") else None
+    precio = _numero(precio, "Nuevo precio de venta", minimo=1) if precio not in (None, "") else None
     with transaccion() as con:
-        nuevo = _entrada(con, id_producto, cantidad, referencia.strip() or "Entrada de mercancía", costo)
+        nuevo = _entrada(con, id_producto, cantidad, referencia.strip() or "Entrada de mercancía", costo, precio)
         auditar("ENTRADA_STOCK", f"id={id_producto} +{cantidad} → {nuevo}", con)
         return nuevo
 

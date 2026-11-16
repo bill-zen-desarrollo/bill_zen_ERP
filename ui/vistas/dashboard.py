@@ -10,7 +10,7 @@ from matplotlib.ticker import FuncFormatter
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
-from logica import reportes_logic as rl
+from logica import licencia, reportes_logic as rl
 from logica.seguridad import Sesion
 from ui import componentes as cmp
 from ui import tema
@@ -63,6 +63,26 @@ class Vista(ttk.Frame):
         ttk.Label(cab, text=f"Hola, {saludo}", style="Cursiva.TLabel").pack(side=LEFT)
         ttk.Label(cab, text="  Así va tu negocio hoy", style="Subtitulo.TLabel").pack(side=LEFT, pady=(12, 0))
         ttk.Button(cab, text="⟳ Actualizar", style="Suave.TButton", command=self.dibujar).pack(side=RIGHT)
+        if principal and hasattr(principal, "ir_a"):
+            if licencia.permite_modulo("auditoria_movil"):
+                ttk.Button(
+                    cab,
+                    text="📱 Auditoría Móvil (QR)",
+                    style="Oro.TButton",
+                    command=lambda: principal.ir_a("auditoria_movil"),
+                ).pack(side=RIGHT, padx=(0, 8))
+            else:
+                btn_qr_bloq = ttk.Button(
+                    cab,
+                    text="🔒 Auditoría Móvil (Plan Pro)",
+                    style="Suave.TButton",
+                    state="disabled",
+                )
+                btn_qr_bloq.pack(side=RIGHT, padx=(0, 8))
+                cmp.vincular_tooltip(
+                    btn_qr_bloq,
+                    "La Auditoría Remota Móvil por QR es exclusiva del Plan Pro. Actualiza tu plan para activarla.",
+                )
 
         self.fila_kpi = ttk.Frame(self)
         self.fila_kpi.pack(fill=X)

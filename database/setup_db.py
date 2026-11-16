@@ -120,6 +120,15 @@ CREATE TABLE IF NOT EXISTS auditoria (
     detalle      TEXT
 );
 
+CREATE TABLE IF NOT EXISTS licencia_sistema (
+    id_licencia      INTEGER PRIMARY KEY CHECK (id_licencia = 1),
+    email_cuenta     TEXT NOT NULL,
+    hw_id_hash       TEXT NOT NULL,
+    plan_adquirido   TEXT NOT NULL CHECK (plan_adquirido IN ('basico', 'standart', 'pro')),
+    firma_integridad TEXT NOT NULL,
+    activado_en      TEXT DEFAULT (datetime('now','localtime'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_facturas_fecha ON facturas(fecha);
 CREATE INDEX IF NOT EXISTS idx_detalles_factura ON detalles_factura(id_factura);
 CREATE INDEX IF NOT EXISTS idx_mov_producto ON movimientos_inventario(id_producto);

@@ -28,7 +28,7 @@ def generar_archivo_plantilla(destino: str):
     # Hoja 1: Plantilla Productos (la que lee el importador)
     ws = wb.active
     ws.title = "Plantilla Productos"
-    cabeceras = ["codigo", "nombre", "categoria", "costo", "stock_minimo", "stock_inicial"]
+    cabeceras = ["codigo", "nombre", "categoria", "costo", "precio", "stock_minimo", "stock_inicial"]
     ws.append(cabeceras)
 
     relleno_cab = PatternFill(start_color="1F5C46", end_color="1F5C46", fill_type="solid")
@@ -40,15 +40,15 @@ def generar_archivo_plantilla(destino: str):
     ws.row_dimensions[1].height = 24
 
     ejemplos = [
-        ["7701001", "Arroz Diana 500g", "Canasta familiar", 2500, 10, 50],
-        ["7701002", "Café Sello Rojo 250g", "Alimentos procesados", 8500, 5, 25],
-        ["7701003", "Gaseosa 1.5L", "Bebidas", 4200, 6, 30],
-        ["7701004", "Detergente en polvo 1kg", "Aseo y hogar", 7800, 4, 15],
+        ["7701001", "Arroz Diana 500g", "Canasta familiar", 2000, 2800, 10, 50],
+        ["7701002", "Café Sello Rojo 250g", "Alimentos procesados", 6800, 9200, 5, 25],
+        ["7701003", "Gaseosa 1.5L", "Bebidas", 3200, 5000, 6, 30],
+        ["7701004", "Detergente en polvo 1kg", "Aseo y hogar", 5900, 8900, 4, 15],
     ]
     for fila in ejemplos:
         ws.append(fila)
 
-    anchos = {"A": 18, "B": 32, "C": 24, "D": 16, "E": 16, "F": 16}
+    anchos = {"A": 18, "B": 32, "C": 24, "D": 16, "E": 16, "F": 16, "G": 16}
     for col_letra, ancho in anchos.items():
         ws.column_dimensions[col_letra].width = ancho
 
@@ -63,7 +63,8 @@ def generar_archivo_plantilla(destino: str):
         ["codigo", "SÍ", "Código único o código de barras del producto (ej. 7701001)."],
         ["nombre", "SÍ", "Nombre comercial del producto."],
         ["categoria", "NO", "Categoría del producto (define el IVA automáticamente). Si se deja vacío usa 'General'."],
-        ["costo", "SÍ", "Precio base o costo sin IVA (solo números, ej. 2500). El sistema suma el IVA de la categoría."],
+        ["costo", "SÍ", "Costo unitario al que te llega del proveedor (ej. 2000)."],
+        ["precio", "SÍ", "Precio final de venta al público por unidad con IVA incluido (ej. 2800). Debe ser mayor o igual al costo."],
         ["stock_minimo", "NO", "Cantidad mínima para alerta de agotado (ej. 5)."],
         ["stock_inicial", "NO", "Unidades con las que inicia el inventario (solo aplica para productos nuevos)."],
         ["", "", ""],
@@ -120,7 +121,7 @@ def importar_inventario(ruta):
         raise ErrorValidacion("Formato incorrecto. Descargue la plantilla y no modifique los títulos de las columnas.")
 
     indices = {col: (cabeceras.index(col) if col in cabeceras else -1)
-               for col in ("codigo", "nombre", "categoria", "costo", "stock_minimo", "stock_inicial")}
+               for col in ("codigo", "nombre", "categoria", "costo", "precio", "stock_minimo", "stock_inicial")}
 
     categorias_existentes = {c["nombre"].lower(): c["id_categoria"] for c in listar_categorias()}
     codigos_existentes = {p["codigo"]: p["id_producto"] for p in consultar("SELECT codigo, id_producto FROM productos")}
@@ -144,11 +145,14 @@ def importar_inventario(ruta):
             id_cat = categorias_existentes[clave_cat]
 
         id_existente = codigos_existentes.get(codigo)
+        costo_str = _celda(fila, "costo", "0")
+        precio_str = _celda(fila, "precio", "") or costo_str
         datos = {
             "codigo": codigo,
             "nombre": nombre,
             "id_categoria": id_cat,
-            "costo": _celda(fila, "costo", "0"),
+            "costo": costo_str,
+            "precio": precio_str,
             "stock_minimo": _celda(fila, "stock_minimo", "0"),
             "stock_inicial": "0" if id_existente else _celda(fila, "stock_inicial", "0"),
         }

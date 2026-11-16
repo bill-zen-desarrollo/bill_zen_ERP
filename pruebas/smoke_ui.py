@@ -9,9 +9,10 @@ os.environ["BILLZEN_DB"] = os.path.join(tempfile.mkdtemp(), "ui.db")
 import ttkbootstrap as ttk
 
 from database.setup_db import inicializar_base_datos
-from logica import auth_logic, empresa_logic, facturacion_logic as fl, productos_logic as pl, reportes_logic as rl, usuarios_logic as ul
+from logica import auth_logic, empresa_logic, facturacion_logic as fl, licencia, productos_logic as pl, reportes_logic as rl, usuarios_logic as ul
 from logica.seguridad import Sesion
 from ui import tema
+from ui.activacion import VistaActivacion
 from ui.shell import SECCIONES, Principal
 from ui.login import Login
 from ui.setup_wizard import AsistenteInicial
@@ -21,6 +22,12 @@ root = ttk.Window(themename="flatly")
 estilo = tema.registrar_tema()
 tema.aplicar_estilos(estilo)
 root.geometry("1280x760")
+
+# Probar vista de activación inicial y luego activar plan 'pro' para recorrer todas las vistas
+est_inicial = licencia.verificar_licencia_local()
+assert not est_inicial["valido"]
+VistaActivacion(root, est_inicial, lambda: None).destroy()
+licencia.guardar_licencia_local("admin@billzen.co", licencia.generar_hardware_id(), "pro")
 
 AsistenteInicial(root, lambda: None).destroy()
 empresa_logic.registrar_empresa({"nit": "900.123.456-7", "razon_social": "Tienda Zen", "direccion": "Calle 1", "telefono": "3001234567"})
@@ -48,6 +55,24 @@ for rol, usuario in (("admin", ("admin", "Clave1234")), ("cajero", ("caja1", "Ca
         try:
             p.ir_a(clave)
             root.update()
+            if clave == "facturacion":
+                v = p.vista_actual
+                primer_item = v.tv.get_children()[0]
+                v.tv.selection_set(primer_item)
+                v.sp_cant_agregar.set("4")
+                v.agregar()
+                assert v.carrito[int(primer_item)]["cantidad"] == 4
+                # Probar botón + y - sin volver a hacer clic manual en el carrito
+                v.tv_car.selection_remove(v.tv_car.selection())
+                v.cambiar(1)
+                assert v.carrito[int(primer_item)]["cantidad"] == 5
+                v.cambiar(-2)
+                assert v.carrito[int(primer_item)]["cantidad"] == 3
+                # Probar fijar cantidad directa en el carrito
+                v.e_cant_car.delete(0, "end")
+                v.e_cant_car.insert(0, "7")
+                v.fijar_cantidad_carrito()
+                assert v.carrito[int(primer_item)]["cantidad"] == 7
             print(f"OK   {rol:7s} {clave}")
         except Exception as e:
             ok = False
@@ -56,5 +81,16 @@ for rol, usuario in (("admin", ("admin", "Clave1234")), ("cajero", ("caja1", "Ca
             traceback.print_exc()
     print(rol, "menú:", list(p.botones))
     p.destroy()
+
+# Verificar Camaleón UI con plan 'basico' (oculta/deshabilita módulos premium con candado)
+auth_logic.iniciar_sesion("admin", "Clave1234")
+licencia.guardar_licencia_local("admin@billzen.co", licencia.generar_hardware_id(), "basico")
+p_basico = Principal(root, lambda: None)
+assert "auditoria_movil" not in p_basico.botones
+assert "contabilidad" not in p_basico.botones
+assert "productos" in p_basico.botones
+print("admin (plan basico) menú habilitado:", list(p_basico.botones))
+p_basico.destroy()
+
 root.destroy()
 print("RESULTADO:", "TODO OK" if ok else "HAY ERRORES")

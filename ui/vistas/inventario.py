@@ -9,9 +9,14 @@ from ui import tema
 
 
 class Vista(ttk.Frame):
+    TODAS_CATS = "Todas las categorías"
+
     def __init__(self, padre, principal):
         super().__init__(padre)
         es_admin = Sesion.es_admin()
+        self.categorias = pl.listar_categorias()
+        self.cat_filtro_mapa = {c["nombre"]: c["id_categoria"] for c in self.categorias}
+
         cmp.encabezado(self, "Inventario",
                        "Existencias actuales y entradas de mercancía" if es_admin else "Consulta de existencias (solo lectura)").pack(anchor=W, pady=(0, 12))
         cuerpo = ttk.Frame(self)
@@ -24,12 +29,23 @@ class Vista(ttk.Frame):
         self.e_buscar = ttk.Entry(barra)
         self.e_buscar.pack(side=LEFT, fill=X, expand=YES)
         cmp.vincular_busqueda(self, self.e_buscar, self.refrescar)
+
+        self.cb_filtro_cat = ttk.Combobox(
+            barra,
+            values=[self.TODAS_CATS] + list(self.cat_filtro_mapa.keys()),
+            state="readonly",
+            width=22,
+        )
+        self.cb_filtro_cat.set(self.TODAS_CATS)
+        self.cb_filtro_cat.pack(side=LEFT, padx=(8, 0))
+        self.cb_filtro_cat.bind("<<ComboboxSelected>>", lambda e: self.refrescar())
+
         self.var_bajo = ttk.BooleanVar(value=False)
         ttk.Checkbutton(barra, text="Solo stock bajo", variable=self.var_bajo, command=self.refrescar).pack(side=LEFT, padx=10)
         ttk.Button(barra, text="Ver movimientos", style="Suave.TButton", command=self.movimientos).pack(side=RIGHT, padx=(10, 0))
         
-        cols = [("codigo", "Código", 100, W), ("nombre", "Producto", 230, W), ("cat", "Categoría", 120, W),
-                ("costo", "Costo", 90, E), ("precio", "Precio", 90, E), ("stock", "Stock", 60, E), ("min", "Mínimo", 65, E), ("est", "Estado", 80, W)]
+        cols = [("codigo", "Código", 105, W), ("nombre", "Producto", 245, W), ("cat", "Categoría", 145, W),
+                ("costo", "Costo", 95, E), ("precio", "Precio", 95, E), ("stock", "Stock", 65, E), ("min", "Mínimo", 65, E)]
         marco, self.tv = cmp.tabla(izq, cols, altura=18)
         marco.pack(fill=BOTH, expand=YES)
         self.tv.bind("<<TreeviewSelect>>", lambda e: self._sel())
@@ -42,7 +58,8 @@ class Vista(ttk.Frame):
             self.lbl_prod = ttk.Label(c, text="Selecciona un producto de la lista", style="Tarjeta.TLabel", foreground=tema.GRIS, wraplength=240)
             self.lbl_prod.pack(anchor=W, pady=(4, 16))
             self.e_cant = cmp.campo(c, "Cantidad que llegó *", ancho=45)
-            self.e_costo = cmp.campo(c, "Nuevo costo unitario (opcional)", ancho=45)
+            self.e_costo = cmp.campo(c, "Nuevo costo proveedor (opcional)", ancho=45)
+            self.e_precio = cmp.campo(c, "Nuevo precio de venta (opcional)", ancho=45)
             self.e_ref = cmp.campo(c, "Referencia (factura proveedor)", ancho=45)
             
             ttk.Label(c, text="El stock solo aumenta aquí y solo disminuye al facturar.", style="Tarjeta.TLabel",
@@ -52,16 +69,32 @@ class Vista(ttk.Frame):
         self.refrescar()
 
     def refrescar(self):
-        filas = pl.listar_productos(self.e_buscar.get().strip())
+        cat_sel = self.cb_filtro_cat.get()
+        id_cat = self.cat_filtro_mapa.get(cat_sel)
+        filas = pl.listar_productos(self.e_buscar.get().strip(), id_categoria=id_cat)
         if self.var_bajo.get():
             filas = [p for p in filas if p["stock"] <= p["stock_minimo"]]
         self.filas = {str(p["id_producto"]): p for p in filas}
 
-        def estado(p):
-            return "Agotado" if p["stock"] <= 0 else ("Bajo" if p["stock"] <= p["stock_minimo"] else "OK")
-        cmp.llenar_tabla(self.tv, [(p["id_producto"], (p["codigo"], p["nombre"], p["categoria"], tema.moneda(p["costo"]),
-                                                       tema.moneda(p["precio"]), p["stock"], p["stock_minimo"], estado(p))) for p in filas],
-                         lambda i, v: ("alerta",) if v[7] != "OK" else ())
+        cmp.llenar_tabla(
+            self.tv,
+            [
+                (
+                    p["id_producto"],
+                    (
+                        p["codigo"],
+                        p["nombre"],
+                        p["categoria"],
+                        tema.moneda(p["costo"]),
+                        tema.moneda(p["precio"]),
+                        p["stock"],
+                        p["stock_minimo"],
+                    ),
+                )
+                for p in filas
+            ],
+            lambda i, _v: ("alerta",) if self.filas[str(i)]["stock"] <= self.filas[str(i)]["stock_minimo"] else (),
+        )
 
     def _sel(self):
         s = self.tv.selection()
@@ -73,11 +106,17 @@ class Vista(ttk.Frame):
         if not s:
             return cmp.mostrar_error(self, "Selecciona un producto de la lista.")
         try:
-            nuevo = pl.registrar_entrada(int(s[0]), self.e_cant.get(), self.e_ref.get(), self.e_costo.get() or None)
+            nuevo = pl.registrar_entrada(
+                int(s[0]),
+                self.e_cant.get(),
+                self.e_ref.get(),
+                self.e_costo.get() or None,
+                self.e_precio.get() or None,
+            )
         except ErrorValidacion as e:
             return cmp.mostrar_error(self, e)
         cmp.toast(self, f"Entrada registrada. Nuevo stock: {nuevo}")
-        for e in (self.e_cant, self.e_costo, self.e_ref):
+        for e in (self.e_cant, self.e_costo, self.e_precio, self.e_ref):
             e.delete(0, END)
         self.refrescar()
 

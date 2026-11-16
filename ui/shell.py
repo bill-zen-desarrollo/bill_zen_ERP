@@ -5,6 +5,7 @@ La sesión permanece abierta hasta que el usuario la cierre manualmente
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
+from logica import licencia
 from logica.empresa_logic import obtener_empresa
 from logica.seguridad import ROL_ADMIN, ROL_CAJERO, ErrorPermiso, Sesion
 from ui import componentes as cmp
@@ -14,6 +15,7 @@ from ui import tema
 def _cargar(nombre):
     import importlib
     if False:  # pistas estáticas para que PyInstaller empaquete todas las vistas y sus dependencias
+        import ui.vistas.auditoria_movil
         import ui.vistas.configuracion
         import ui.vistas.contabilidad
         import ui.vistas.dashboard
@@ -24,6 +26,7 @@ def _cargar(nombre):
         import ui.vistas.reportes
         import ui.vistas.usuarios
         import openpyxl
+        import qrcode
     modulo = importlib.import_module(f"ui.vistas.{nombre}")
     return modulo.Vista
 
@@ -38,6 +41,7 @@ SECCIONES = [
     ("contabilidad", "＄  Contabilidad", "contabilidad", (ROL_ADMIN,)),
     ("reportes", "📈  Reportes", "reportes", (ROL_ADMIN,)),
     ("usuarios", "👥  Usuarios", "usuarios", (ROL_ADMIN,)),
+    ("auditoria_movil", "📱  Auditoría Móvil (QR)", "auditoria_movil", (ROL_ADMIN,)),
     ("configuracion", "⚙  Configuración", "configuracion", (ROL_ADMIN,)),
 ]
 
@@ -48,7 +52,9 @@ class Principal(ttk.Frame):
         self.al_cerrar_sesion = al_cerrar_sesion
         self.pack(fill=BOTH, expand=YES)
         self.usuario = Sesion.usuario
+        self.plan_actual = licencia.obtener_plan_actual()
         self.botones = {}
+        self._tooltips = []
         self.vista_actual = None
 
         lateral = ttk.Frame(self, style="Lateral.TFrame", width=240)
@@ -61,13 +67,38 @@ class Principal(ttk.Frame):
         ttk.Label(logo, text="Zen", style="LogoZen.TLabel").pack(side=LEFT)
         emp = obtener_empresa() or {}
         ttk.Label(lateral, text=emp.get("razon_social", ""), style="Lateral.TLabel", wraplength=200,
-                  font=(tema.FUENTE, 9)).pack(anchor=W, padx=24, pady=(0, 18))
+                  font=(tema.FUENTE, 9)).pack(anchor=W, padx=24, pady=(0, 4))
+        etiqueta_plan = f"★ PLAN {self.plan_actual.upper()}"
+        ttk.Label(
+            lateral,
+            text=etiqueta_plan,
+            style="Lateral.TLabel",
+            foreground=tema.DORADO_CLARO,
+            font=(tema.FUENTE, 8, "bold"),
+        ).pack(anchor=W, padx=24, pady=(0, 14))
 
         for clave, texto, modulo, roles in SECCIONES:
             if self.usuario["id_rol"] in roles:
-                b = ttk.Button(lateral, text=texto, style="Menu.TButton", command=lambda c=clave: self.ir_a(c))
-                b.pack(fill=X)
-                self.botones[clave] = b
+                habilitado = licencia.permite_modulo(clave, self.plan_actual)
+                if habilitado:
+                    b = ttk.Button(lateral, text=texto, style="Menu.TButton", command=lambda c=clave: self.ir_a(c))
+                    b.pack(fill=X)
+                    self.botones[clave] = b
+                else:
+                    plan_req = licencia.plan_requerido_para(clave)
+                    b = ttk.Button(
+                        lateral,
+                        text=f"🔒  {texto}",
+                        style="Menu.TButton",
+                        state="disabled",
+                    )
+                    b.pack(fill=X)
+                    cmp.vincular_tooltip(
+                        b,
+                        f"Disponible desde el Plan {plan_req}.\n"
+                        f"Tu plan actual es {self.plan_actual.capitalize()}. "
+                        "Actualiza en bill-zen-users.vercel.app para desbloquearlo.",
+                    )
 
         pie = ttk.Frame(lateral, style="Lateral.TFrame", padding=18)
         pie.pack(side=BOTTOM, fill=X)
@@ -84,7 +115,7 @@ class Principal(ttk.Frame):
         self.ir_a(primera)
 
     def ir_a(self, clave):
-        if clave not in self.botones:
+        if clave not in self.botones or not licencia.permite_modulo(clave, self.plan_actual):
             return
         for k, b in self.botones.items():
             b.configure(style="MenuActivo.TButton" if k == clave else "Menu.TButton")

@@ -67,7 +67,9 @@ def aplicar_estilos(estilo: ttk.Style):
     estilo.map("Peligro.TButton", background=[("active", "#c9674f")])
     estilo.configure("Menu.TButton", background=VERDE_OSCURO, foreground=BEIGE, anchor="w",
                      padding=(18, 11), font=(FUENTE, 10, "bold"), bordercolor=VERDE_OSCURO)
-    estilo.map("Menu.TButton", background=[("active", VERDE)], foreground=[("active", BLANCO)])
+    estilo.map("Menu.TButton",
+               background=[("active", VERDE), ("disabled", VERDE_OSCURO)],
+               foreground=[("active", BLANCO), ("disabled", "#7A9488")])
     estilo.configure("MenuActivo.TButton", background=VERDE, foreground=DORADO_CLARO, anchor="w",
                      padding=(18, 11), font=(FUENTE, 10, "bold"), bordercolor=DORADO)
 

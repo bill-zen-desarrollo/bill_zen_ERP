@@ -256,6 +256,22 @@ def iniciar_sesion(username, password) -> dict:
         ).fetchone()
 
         if fila is None:
+            # Permite que el administrador también inicie sesión escribiendo el NIT o correo registrado en Neon.tech
+            emp_o_lic = con.execute(
+                """SELECT 1 FROM empresa WHERE id_empresa = 1 AND (nit = ? OR LOWER(correo) = LOWER(?))
+                   UNION
+                   SELECT 1 FROM licencia_sistema WHERE id_licencia = 1 AND LOWER(email_cuenta) = LOWER(?)""",
+                (username, username, username),
+            ).fetchone()
+            if emp_o_lic:
+                fila = con.execute(
+                    """SELECT u.*, r.nombre AS rol FROM usuarios u
+                       JOIN roles r ON r.id_rol = u.id_rol
+                       WHERE u.id_rol = ? AND u.activo = 1 ORDER BY u.id_usuario LIMIT 1""",
+                    (ROL_ADMIN,),
+                ).fetchone()
+
+        if fila is None:
             verificar_password_ficticio(password)
             con.execute("INSERT INTO auditoria (accion, detalle) VALUES ('LOGIN_FALLIDO', ?)", (username[:40],))
             error = mensaje_generico
