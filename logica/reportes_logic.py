@@ -652,7 +652,15 @@ def resumen_cajero_hoy():
 
 
 @requiere_rol(ROL_ADMIN)
-def ultimas_auditorias(limite=200):
+def ultimas_auditorias(desde=None, hasta=None, limite=300):
+    if desde and hasta:
+        return consultar(
+            """SELECT a.fecha, COALESCE(u.username,'—') AS usuario, a.accion, a.detalle
+               FROM auditoria a LEFT JOIN usuarios u ON u.id_usuario=a.id_usuario
+               WHERE date(a.fecha) BETWEEN ? AND ?
+               ORDER BY a.id_auditoria DESC LIMIT ?""",
+            (desde, hasta, limite),
+        )
     return consultar("""SELECT a.fecha, COALESCE(u.username,'—') AS usuario, a.accion, a.detalle
                         FROM auditoria a LEFT JOIN usuarios u ON u.id_usuario=a.id_usuario
                         ORDER BY a.id_auditoria DESC LIMIT ?""", (limite,))

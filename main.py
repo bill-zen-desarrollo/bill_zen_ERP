@@ -39,7 +39,12 @@ from ui.shell import Principal
 
 def _ruta_icono() -> str | None:
     base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
-    for rel in (("assets", "icono.ico"), ("ui", "images", "icono.ico")):
+    for rel in (
+        ("assets", "logo.ico"),
+        ("assets", "icono.ico"),
+        ("ui", "images", "logo.ico"),
+        ("ui", "images", "icono.ico"),
+    ):
         ruta = os.path.join(base, *rel)
         if os.path.exists(ruta):
             return ruta
@@ -56,27 +61,48 @@ class BillZenApp:
                 pass
         inicializar_base_datos()
         self.ventana = ttk.Window(themename="flatly", iconphoto=None)
+        self.ventana.withdraw()
         self.ventana.report_callback_exception = maneja_excepcion
         estilo = tema.registrar_tema()
         tema.aplicar_estilos(estilo)
         self.ventana.title("Bill Zen ERP")
+        self.ventana.minsize(1100, 680)
+        self.ventana.configure(background=tema.BEIGE)
         icono = _ruta_icono()
         if icono:
             try:
                 self.ventana.iconbitmap(default=icono)
+                self.ventana.wm_iconbitmap(icono)
                 from PIL import Image, ImageTk
                 with Image.open(icono) as im:
-                    self._icono_tk = ImageTk.PhotoImage(im.convert("RGBA").resize((32, 32), Image.LANCZOS))
-                self.ventana.iconphoto(True, self._icono_tk)
+                    rgba = im.convert("RGBA")
+                    self._iconos_tk = [
+                        ImageTk.PhotoImage(rgba.resize((sz, sz), Image.LANCZOS))
+                        for sz in (16, 24, 32, 48, 64)
+                    ]
+                self.ventana.iconphoto(True, *self._iconos_tk)
             except Exception:
                 pass
+
+        self.iniciar()
         try:
             self.ventana.state("zoomed")
         except Exception:
             self.ventana.geometry("1280x760")
-        self.ventana.minsize(1100, 680)
-        self.ventana.configure(background=tema.BEIGE)
-        self.iniciar()
+        self.ventana.update_idletasks()
+        if icono and os.name == "nt":
+            try:
+                import ctypes
+                hwnd = ctypes.windll.user32.GetParent(self.ventana.winfo_id())
+                hicon_sm = ctypes.windll.user32.LoadImageW(0, icono, 1, 16, 16, 0x00000010)
+                hicon_lg = ctypes.windll.user32.LoadImageW(0, icono, 1, 48, 48, 0x00000010)
+                if hicon_sm:
+                    ctypes.windll.user32.SendMessageW(hwnd, 0x0080, 0, hicon_sm)
+                if hicon_lg:
+                    ctypes.windll.user32.SendMessageW(hwnd, 0x0080, 1, hicon_lg)
+            except Exception:
+                pass
+        self.ventana.deiconify()
         try:
             self.ventana.lift()
             self.ventana.attributes("-topmost", True)
@@ -91,11 +117,12 @@ class BillZenApp:
             VistaActivacion(self.ventana, estado_lic, al_activar=self.iniciar)
             return
 
-        # Si ya tiene licencia local, consulta rápido a Vercel/Neon si mejoró su plan en la web
-        try:
-            licencia.sincronizar_plan_con_nube(timeout_seg=2.5)
-        except Exception:
-            pass
+        # Sincronizar plan en segundo plano para que la ventana abra al instante sin congelarse
+        import threading
+        threading.Thread(
+            target=lambda: licencia.sincronizar_plan_con_nube(timeout_seg=2.5),
+            daemon=True,
+        ).start()
 
         if (not empresa_logic.empresa_registrada()
                 or not auth_logic.existe_admin()

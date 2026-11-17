@@ -3,7 +3,7 @@ Punto de Equilibrio, Arqueo de Flujo de Caja (Efectivo vs Bancos) y Liquidación
 import calendar
 import os
 import tkinter as tk
-from datetime import date
+from datetime import date, timedelta
 from tkinter import filedialog
 
 import ttkbootstrap as ttk
@@ -15,10 +15,14 @@ from ui import componentes as cmp
 from ui import tema
 
 
-def _fin_mes_actual() -> str:
+def _fin_mes_actual_date() -> date:
     hoy = date.today()
     ultimo_dia = calendar.monthrange(hoy.year, hoy.month)[1]
-    return date(hoy.year, hoy.month, ultimo_dia).isoformat()
+    return date(hoy.year, hoy.month, ultimo_dia)
+
+
+def _fin_mes_actual() -> str:
+    return _fin_mes_actual_date().isoformat()
 
 
 class Vista(ttk.Frame):
@@ -40,17 +44,35 @@ class Vista(ttk.Frame):
         barra_fechas = ttk.Frame(cab)
         barra_fechas.pack(side=RIGHT, pady=(6, 0))
         ttk.Label(barra_fechas, text="Desde:", style="Fondo.TLabel", font=(tema.FUENTE, 9, "bold")).pack(side=LEFT)
-        self.e_desde = ttk.Entry(barra_fechas, width=11)
-        self.e_desde.insert(0, date.today().replace(day=1).isoformat())
-        self.e_desde.pack(side=LEFT, padx=(4, 8))
+        self.de_desde = ttk.DateEntry(
+            barra_fechas,
+            dateformat="%Y-%m-%d",
+            startdate=date.today().replace(day=1),
+            width=11,
+            bootstyle="success",
+        )
+        self.de_desde.pack(side=LEFT, padx=(4, 8))
+        self.e_desde = self.de_desde.entry
 
         ttk.Label(barra_fechas, text="Hasta:", style="Fondo.TLabel", font=(tema.FUENTE, 9, "bold")).pack(side=LEFT)
-        self.e_hasta = ttk.Entry(barra_fechas, width=11)
-        self.e_hasta.insert(0, _fin_mes_actual())
-        self.e_hasta.pack(side=LEFT, padx=(4, 8))
+        self.de_hasta = ttk.DateEntry(
+            barra_fechas,
+            dateformat="%Y-%m-%d",
+            startdate=_fin_mes_actual_date(),
+            width=11,
+            bootstyle="success",
+        )
+        self.de_hasta.pack(side=LEFT, padx=(4, 8))
+        self.e_hasta = self.de_hasta.entry
+
+        self.e_desde.bind("<Return>", lambda e: self.refrescar())
+        self.e_hasta.bind("<Return>", lambda e: self.refrescar())
+        self.de_desde.bind("<<DateEntrySelected>>", lambda e: self.refrescar())
+        self.de_hasta.bind("<<DateEntrySelected>>", lambda e: self.refrescar())
 
         ttk.Button(barra_fechas, text="Hoy", style="Suave.TButton", command=self._rango_hoy, padding=(8, 5)).pack(side=LEFT, padx=2)
         ttk.Button(barra_fechas, text="Mes", style="Suave.TButton", command=self._rango_mes, padding=(8, 5)).pack(side=LEFT, padx=2)
+        ttk.Button(barra_fechas, text="Mes ant.", style="Suave.TButton", command=self._rango_mes_anterior, padding=(8, 5)).pack(side=LEFT, padx=2)
         ttk.Button(barra_fechas, text="Actualizar", style="Zen.TButton", command=self.refrescar, padding=(10, 5)).pack(side=LEFT, padx=(6, 4))
         ttk.Button(barra_fechas, text="Exportar CSV", style="Oro.TButton", command=self.exportar_contabilidad, padding=(10, 5)).pack(side=LEFT)
 
@@ -439,12 +461,31 @@ class Vista(ttk.Frame):
         self.e_hasta.insert(0, _fin_mes_actual())
         self.refrescar()
 
+    def _rango_mes_anterior(self):
+        primero_actual = date.today().replace(day=1)
+        fin_ant = primero_actual - timedelta(days=1)
+        ini_ant = fin_ant.replace(day=1)
+        self.e_desde.delete(0, END)
+        self.e_desde.insert(0, ini_ant.isoformat())
+        self.e_hasta.delete(0, END)
+        self.e_hasta.insert(0, fin_ant.isoformat())
+        self.refrescar()
+
     def _kpi(self, clave, valor, detalle):
         self.kpis[clave].valor.configure(text=valor)
         self.kpis[clave].detalle.configure(text=detalle)
 
     def refrescar(self):
         d, h = self.e_desde.get().strip(), self.e_hasta.get().strip()
+        try:
+            d_ini = date.fromisoformat(d)
+            d_fin = date.fromisoformat(h)
+        except ValueError:
+            cmp.mostrar_error(self, "Formato de fecha inválido. Usa AAAA-MM-DD (ej. 2026-11-16) o el calendario.")
+            return
+        if d_ini > d_fin:
+            cmp.mostrar_error(self, "La fecha 'Desde' no puede ser posterior a la fecha 'Hasta'.")
+            return
         r = rl.estado_resultados(d, h)
         flujo = rl.flujo_caja_y_bancos(d, h)
         ivas = rl.resumen_iva_dian(d, h)

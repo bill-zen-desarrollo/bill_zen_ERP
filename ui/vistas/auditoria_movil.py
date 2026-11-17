@@ -69,7 +69,7 @@ class Vista(ttk.Frame):
         ).pack(anchor=CENTER)
         ttk.Label(
             izq,
-            text="Escanea este QR desde Bill Zen App (Kotlin). Si el celular no tiene la app instalada, será redirigido automáticamente a la página oficial de descarga.",
+            text="Escanea este QR desde Bill Zen App. Si el celular no tiene la app instalada, será redirigido automáticamente a la página oficial de descarga.",
             style="Tarjeta.TLabel",
             foreground=tema.GRIS,
             wraplength=320,
@@ -146,13 +146,13 @@ class Vista(ttk.Frame):
         self._fila_dato(
             est,
             "Permisos de Base de Datos:",
-            "100% SOLO LECTURA (sqlite3 mode=ro + query_only)",
+            "100% SOLO LECTURA",
             color_valor=tema.VERDE,
         )
         self._fila_dato(
             est,
             "Control de Acceso:",
-            "Exclusivo Rol Administrador (id_rol == 1) · Cajeros bloqueados (HTTP 403)",
+            "Exclusivo Rol Administrador",
             color_valor=tema.VERDE_OSCURO,
         )
 
