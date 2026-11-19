@@ -54,7 +54,7 @@ class Login(ttk.Frame):
         tk.Label(fila_logo, text="Bill", bg=tema.VERDE, fg=tema.BLANCO,
                  font=(tema.FUENTE, 24, "bold")).pack(side=LEFT)
         tk.Label(fila_logo, text=" Zen", bg=tema.VERDE, fg=tema.DORADO_CLARO,
-                 font=(tema.FUENTE, 24, "bold")).pack(side=LEFT)
+                 font=(tema.FUENTE_CURSIVA, 24)).pack(side=LEFT)
         razon = self._emp.get("razon_social") or "Sistema ERP para pymes"
         tk.Label(cab, text=razon, bg=tema.VERDE, fg="#D7E6DF", font=(tema.FUENTE, 10),
                  wraplength=ANCHO_FORM, justify=LEFT, anchor=W).pack(anchor=W, pady=(2, 0))

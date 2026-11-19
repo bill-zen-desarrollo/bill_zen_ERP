@@ -67,7 +67,7 @@ class VistaActivacion(ttk.Frame):
             text=" Zen",
             bg=tema.VERDE,
             fg=tema.DORADO_CLARO,
-            font=(tema.FUENTE, 23, "bold"),
+            font=(tema.FUENTE_CURSIVA, 23),
         ).pack(side=LEFT)
 
         badge_lic = tk.Label(

@@ -30,10 +30,10 @@ SYNC_AMBAR_BORDE = "#FCD34D"
 
 NOMBRE_TEMA = "billzen"
 
-# Tipografía unificada sin serifa (Segoe UI en toda la aplicación)
+# Tipografía unificada sin serifa (Segoe UI) + toque cursivo de marca en "Zen" y saludo del Dashboard
 FUENTE = "Segoe UI"
 FUENTE_TITULO = "Segoe UI"
-FUENTE_CURSIVA = "Segoe UI"
+FUENTE_CURSIVA = "Segoe Script"
 
 
 def registrar_tema():
@@ -91,8 +91,8 @@ def aplicar_estilos(estilo: ttk.Style):
 
     estilo.configure("Lateral.TLabel", background=VERDE_OSCURO, foreground=BEIGE, font=(FUENTE, 11))
     estilo.configure("Logo.TLabel", background=VERDE_OSCURO, foreground=BLANCO, font=(FUENTE, 20, "bold"))
-    estilo.configure("LogoZen.TLabel", background=VERDE_OSCURO, foreground=DORADO, font=(FUENTE, 20, "bold"))
-    estilo.configure("Cursiva.TLabel", background=BEIGE, foreground=VERDE_OSCURO, font=(FUENTE, 20, "bold"))
+    estilo.configure("LogoZen.TLabel", background=VERDE_OSCURO, foreground=DORADO, font=(FUENTE_CURSIVA, 22))
+    estilo.configure("Cursiva.TLabel", background=BEIGE, foreground=DORADO, font=(FUENTE_CURSIVA, 26))
 
     # Checkbuttons sobre tarjetas y sobre fondo
     estilo.configure("TCheckbutton", background=BEIGE, foreground=TEXTO, font=(FUENTE, 10, "bold"))
@@ -146,12 +146,17 @@ def aplicar_estilos(estilo: ttk.Style):
         foreground=[("active", BLANCO)],
     )
 
-    # Entradas y selectores (>= 38px altura visual)
-    estilo.configure("TEntry", padding=(10, 8), fieldbackground=BLANCO, foreground=TEXTO, bordercolor=BEIGE_OSCURO, font=(FUENTE, 11))
-    estilo.map("TEntry", bordercolor=[("focus", VERDE)])
-    estilo.configure("TCombobox", padding=(10, 8), fieldbackground=BLANCO, foreground=TEXTO, bordercolor=BEIGE_OSCURO, font=(FUENTE, 11))
-    estilo.map("TCombobox", fieldbackground=[("readonly", BLANCO)], foreground=[("readonly", TEXTO)])
-    estilo.configure("TSpinbox", padding=(8, 7), fieldbackground=BLANCO, foreground=TEXTO, bordercolor=BEIGE_OSCURO, font=(FUENTE, 11))
+    # Entradas y selectores (>= 38px altura visual) con realce de foco nativo en C/Tcl
+    estilo.configure("TEntry", padding=(10, 8), fieldbackground=BLANCO, foreground=TEXTO, bordercolor=BEIGE_OSCURO, lightcolor=BEIGE_OSCURO, darkcolor=BEIGE_OSCURO, font=(FUENTE, 11))
+    estilo.map("TEntry", bordercolor=[("focus", VERDE), ("hover", VERDE_HOVER)], lightcolor=[("focus", VERDE)], darkcolor=[("focus", VERDE)])
+    estilo.configure("TCombobox", padding=(10, 8), fieldbackground=BLANCO, foreground=TEXTO, bordercolor=BEIGE_OSCURO, lightcolor=BEIGE_OSCURO, darkcolor=BEIGE_OSCURO, font=(FUENTE, 11))
+    estilo.map("TCombobox", fieldbackground=[("readonly", BLANCO)], foreground=[("readonly", TEXTO)], bordercolor=[("focus", VERDE), ("hover", VERDE_HOVER)], lightcolor=[("focus", VERDE)])
+    estilo.configure("TSpinbox", padding=(8, 7), fieldbackground=BLANCO, foreground=TEXTO, bordercolor=BEIGE_OSCURO, lightcolor=BEIGE_OSCURO, darkcolor=BEIGE_OSCURO, font=(FUENTE, 11))
+    estilo.map("TSpinbox", bordercolor=[("focus", VERDE), ("hover", VERDE_HOVER)], lightcolor=[("focus", VERDE)])
+
+    # Botón rápido de denominaciones de billetes en el POS
+    estilo.configure("Billete.TButton", background="#EFECE3", foreground=VERDE_OSCURO, bordercolor=BEIGE_OSCURO, font=(FUENTE, 9, "bold"), padding=(6, 5))
+    estilo.map("Billete.TButton", background=[("active", DORADO_CLARO)], foreground=[("active", NEGRO)])
 
     # Tablas Treeview con alta densidad táctil y encabezados legibles
     estilo.configure(
@@ -174,8 +179,21 @@ def aplicar_estilos(estilo: ttk.Style):
     estilo.map("Treeview.Heading", background=[("active", VERDE_HOVER)])
     estilo.map("Treeview", background=[("selected", "#E9DFC4")], foreground=[("selected", NEGRO)])
 
-    estilo.configure("TNotebook", background=BEIGE, borderwidth=0)
-    estilo.configure("TNotebook.Tab", padding=(18, 10), font=(FUENTE, 10, "bold"))
+    # Pestañas estilo Segmented Control SaaS (0 widgets extra, renderizado nativo)
+    estilo.configure("TNotebook", background=BEIGE, borderwidth=0, tabmargins=(0, 0, 0, 6))
+    estilo.configure(
+        "TNotebook.Tab",
+        background="#E6E2D6",
+        foreground=TEXTO,
+        padding=(18, 10),
+        font=(FUENTE, 10, "bold"),
+        borderwidth=0,
+    )
+    estilo.map(
+        "TNotebook.Tab",
+        background=[("selected", VERDE), ("active", VERDE_HOVER)],
+        foreground=[("selected", BLANCO), ("active", BLANCO)],
+    )
 
 
 def moneda(valor) -> str:

@@ -214,7 +214,7 @@ class Vista(ttk.Frame):
 
         ttk.Button(
             fb,
-            text="Vaciar factura",
+            text="Vaciar [F4]",
             style="Peligro.TButton",
             command=self.vaciar,
             padding=(10, 7),
@@ -228,18 +228,38 @@ class Vista(ttk.Frame):
         ).pack(side=RIGHT, padx=(0, 6))
 
         # ================== 3. PANEL DERECHO: TOTALES Y COBRO ==================
-        borde = cmp.tarjeta(der, padding=20)
+        borde = cmp.tarjeta(der, padding=18)
         borde.pack(fill=BOTH, expand=YES)
         c = borde.interior
-        ttk.Label(c, text="Resumen y Cobro", style="TarjetaTitulo.TLabel").pack(anchor=W, pady=(0, 8))
+        ttk.Label(c, text="Resumen y Cobro", style="TarjetaTitulo.TLabel").pack(anchor=W, pady=(0, 6))
 
         self.lbl_sub = self._fila_total(c, "Subtotal (Base sin IVA)")
         self.lbl_iva = self._fila_total(c, "Impuesto IVA")
-        ttk.Separator(c).pack(fill=X, pady=8)
-        self.lbl_total = self._fila_total(c, "TOTAL A PAGAR", grande=True)
-        ttk.Separator(c).pack(fill=X, pady=8)
 
-        ttk.Label(c, text="Método de pago", style="FormLabel.TLabel").pack(anchor=W, pady=(6, 3))
+        # Bloque destacado SaaS de TOTAL A PAGAR en verde profundo con acento dorado
+        bloque_total_borde = tk.Frame(c, bg=tema.DORADO, padx=1, pady=1)
+        bloque_total_borde.pack(fill=X, pady=(10, 10))
+        bloque_total = tk.Frame(bloque_total_borde, bg=tema.VERDE_PROFUNDO, padx=14, pady=10)
+        bloque_total.pack(fill=X)
+        tk.Label(
+            bloque_total,
+            text="TOTAL A PAGAR",
+            bg=tema.VERDE_PROFUNDO,
+            fg=tema.DORADO_CLARO,
+            font=(tema.FUENTE, 9, "bold"),
+            anchor="w",
+        ).pack(fill=X)
+        self.lbl_total = tk.Label(
+            bloque_total,
+            text="$ 0",
+            bg=tema.VERDE_PROFUNDO,
+            fg=tema.BLANCO,
+            font=(tema.FUENTE, 22, "bold"),
+            anchor="e",
+        )
+        self.lbl_total.pack(fill=X)
+
+        ttk.Label(c, text="Método de pago", style="FormLabel.TLabel").pack(anchor=W, pady=(2, 3))
         self.cb_pago = ttk.Combobox(c, values=fl.METODOS_PAGO, state="readonly", font=(tema.FUENTE, 11))
         metodo_guardado = self._borrador.get("metodo_pago", "Efectivo")
         self.cb_pago.set(metodo_guardado if metodo_guardado in fl.METODOS_PAGO else "Efectivo")
@@ -247,8 +267,8 @@ class Vista(ttk.Frame):
         self.cb_pago.bind("<<ComboboxSelected>>", lambda e: self._al_cambiar_datos_cobro())
 
         fr = ttk.Frame(c, style="Tarjeta.TFrame")
-        fr.pack(fill=X, pady=(12, 0))
-        ttk.Label(fr, text="Valor recibido ($)", style="Tarjeta.TLabel", font=(tema.FUENTE, 10, "bold")).pack(side=LEFT)
+        fr.pack(fill=X, pady=(10, 0))
+        ttk.Label(fr, text="Valor recibido ($)", style="FormLabel.TLabel").pack(side=LEFT)
         self.e_recibido = ttk.Entry(fr, width=15, justify=RIGHT, font=(tema.FUENTE, 11, "bold"))
         if self._borrador.get("recibido"):
             self.e_recibido.insert(0, self._borrador["recibido"])
@@ -256,14 +276,32 @@ class Vista(ttk.Frame):
         self.e_recibido.bind("<KeyRelease>", lambda e: self._al_cambiar_datos_cobro())
         self.e_recibido.bind("<Return>", lambda e: self.cobrar())
 
+        # Botones rápidos de billetes colombianos (0 fricción al cobrar en efectivo)
+        fila_billetes = ttk.Frame(c, style="Tarjeta.TFrame")
+        fila_billetes.pack(fill=X, pady=(6, 2))
+        for idx, (etq, monto) in enumerate((
+            ("Exacto", None),
+            ("$10k", 10000),
+            ("$20k", 20000),
+            ("$50k", 50000),
+            ("$100k", 100000),
+        )):
+            fila_billetes.columnconfigure(idx, weight=1, uniform="bil")
+            ttk.Button(
+                fila_billetes,
+                text=etq,
+                style="Billete.TButton",
+                command=lambda m=monto: self._fijar_billete(m),
+            ).grid(row=0, column=idx, sticky=EW, padx=(0 if idx == 0 else 3, 0))
+
         self.lbl_cambio = ttk.Label(
             c,
             text="Cambio: $ 0",
             style="Tarjeta.TLabel",
             foreground=tema.VERDE_OSCURO,
-            font=(tema.FUENTE_TITULO, 13, "bold"),
+            font=(tema.FUENTE, 13, "bold"),
         )
-        self.lbl_cambio.pack(anchor=E, pady=(6, 4))
+        self.lbl_cambio.pack(anchor=E, pady=(4, 2))
 
         self.e_cliente = cmp.campo(c, "Cliente (opcional · Enter para Consumidor final)")
         if self._borrador.get("cliente"):
@@ -273,11 +311,17 @@ class Vista(ttk.Frame):
 
         ttk.Button(
             c,
-            text="COBRAR Y EMITIR FACTURA",
+            text="COBRAR Y EMITIR FACTURA  [F2]",
             style="Oro.TButton",
             command=self.cobrar,
             padding=(14, 12),
-        ).pack(fill=X, pady=(16, 0))
+        ).pack(fill=X, pady=(10, 0))
+
+        # Atajos rápidos de teclado POS
+        top = self.winfo_toplevel()
+        self._top_ref = top
+        top.bind("<F2>", self._atajo_cobrar)
+        top.bind("<F4>", self._atajo_vaciar)
 
         self.productos = {}
         self.buscar()
@@ -663,6 +707,21 @@ class Vista(ttk.Frame):
         self.lbl_total.configure(text=tema.moneda(total))
         self._actualizar_cambio()
 
+    def _fijar_billete(self, monto: int | None):
+        self.cb_pago.set("Efectivo")
+        valor = round(getattr(self, "total", 0)) if monto is None else int(monto)
+        self.e_recibido.delete(0, END)
+        self.e_recibido.insert(0, f"{valor:,}".replace(",", "."))
+        self._al_cambiar_datos_cobro()
+
+    def _atajo_cobrar(self, _e=None):
+        if self.winfo_exists():
+            self.cobrar()
+
+    def _atajo_vaciar(self, _e=None):
+        if self.winfo_exists():
+            self.vaciar()
+
     def _actualizar_cambio(self):
         if self.cb_pago.get() != "Efectivo":
             self.lbl_cambio.configure(text="Pago exacto sin efectivo")
@@ -702,4 +761,10 @@ class Vista(ttk.Frame):
 
     def destroy(self):
         self._guardar_estado_borrador()
+        try:
+            if getattr(self, "_top_ref", None) and self._top_ref.winfo_exists():
+                self._top_ref.unbind("<F2>")
+                self._top_ref.unbind("<F4>")
+        except Exception:
+            pass
         super().destroy()

@@ -492,6 +492,8 @@ def _construir_filtros_kardex(
     filtro_tipo: str = "Todos",
     solo_stock_bajo: bool = False,
     id_producto: int | None = None,
+    desde: str | None = None,
+    hasta: str | None = None,
 ) -> tuple[str, list]:
     """Construye la cláusula WHERE compartida entre listado paginado y conteo SQL del Kardex."""
     clausulas = []
@@ -521,6 +523,14 @@ def _construir_filtros_kardex(
         clausulas.append("m.product_id = ?")
         params.append(int(id_producto))
 
+    if desde and str(desde).strip():
+        clausulas.append("date(m.created_at) >= ?")
+        params.append(str(desde).strip())
+
+    if hasta and str(hasta).strip():
+        clausulas.append("date(m.created_at) <= ?")
+        params.append(str(hasta).strip())
+
     where_sql = (" WHERE " + " AND ".join(clausulas)) if clausulas else ""
     return where_sql, params
 
@@ -531,9 +541,11 @@ def contar_movimientos_kardex(
     filtro_tipo: str = "Todos",
     solo_stock_bajo: bool = False,
     id_producto: int | None = None,
+    desde: str | None = None,
+    hasta: str | None = None,
 ) -> int:
     """Cuenta en SQL puro el total de movimientos del Kardex que cumplen los filtros."""
-    where_sql, params = _construir_filtros_kardex(texto, filtro_tipo, solo_stock_bajo, id_producto)
+    where_sql, params = _construir_filtros_kardex(texto, filtro_tipo, solo_stock_bajo, id_producto, desde, hasta)
     fila = consultar_uno(
         f"""SELECT COUNT(*) AS total
             FROM inventory_movements m
@@ -552,9 +564,11 @@ def listar_movimientos_kardex(
     id_producto: int | None = None,
     limite: int = 100,
     offset: int = 0,
+    desde: str | None = None,
+    hasta: str | None = None,
 ) -> list[dict]:
     """Consulta paginada del historial cronológico del Kardex (`inventory_movements`, máx. 100 por página)."""
-    where_sql, params = _construir_filtros_kardex(texto, filtro_tipo, solo_stock_bajo, id_producto)
+    where_sql, params = _construir_filtros_kardex(texto, filtro_tipo, solo_stock_bajo, id_producto, desde, hasta)
     limite_seguro = max(1, min(int(limite or 100), 100))
     offset_seguro = max(0, int(offset or 0))
 

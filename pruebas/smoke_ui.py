@@ -23,10 +23,10 @@ estilo = tema.registrar_tema()
 tema.aplicar_estilos(estilo)
 root.geometry("1280x760")
 
-# Verificar sistema de diseño global (Segoe UI sin serifa, rowheight=36) y luego vistas
+# Verificar sistema de diseño global (Segoe UI sin serifa, Segoe Script cursiva en marca, rowheight=36)
 assert tema.FUENTE == "Segoe UI"
 assert tema.FUENTE_TITULO == "Segoe UI"
-assert tema.FUENTE_CURSIVA == "Segoe UI"
+assert tema.FUENTE_CURSIVA == "Segoe Script"
 assert int(estilo.configure("Treeview", "rowheight")) == 36
 
 # Probar vista de activación inicial (tamaño fijo ante errores) y luego activar plan 'pro'
@@ -48,7 +48,14 @@ licencia._sincronizar_empresa_local(
 )
 licencia.guardar_licencia_local("admin@billzen.co", licencia.generar_hardware_id(), "pro")
 
-AsistenteInicial(root, lambda: None).destroy()
+asist = AsistenteInicial(root, lambda: None)
+root.update()
+tam_asist_0 = (asist.tarjeta.winfo_width(), asist.tarjeta.winfo_height())
+asist._guardar_configuracion()  # falla validación por campos vacíos
+root.update()
+tam_asist_1 = (asist.tarjeta.winfo_width(), asist.tarjeta.winfo_height())
+assert tam_asist_0 == tam_asist_1, f"El modal del asistente cambió de tamaño al mostrar error: {tam_asist_0} != {tam_asist_1}"
+asist.destroy()
 auth_logic.configurar_admin_inicial(
     "Clave1234",
     "Clave1234",
@@ -141,6 +148,21 @@ for rol, usuario in (("admin", ("administrador", "Clave1234")), ("cajero", ("caj
                 root.update()
                 v_prod = p.vista_actual
                 assert v_prod.filas[str(leche_prod["id_producto"])]["stock"] == 17
+            elif clave == "facturas" and rol == "cajero":
+                v = p.vista_actual
+                assert hasattr(v, "de_desde") and hasattr(v, "de_hasta")
+                v._rango_hoy()
+                v._rango_dias(30)
+            elif clave == "configuracion" and rol == "admin":
+                v = p.vista_actual
+                assert "nit" not in v.campos and "razon_social" not in v.campos and "correo" not in v.campos
+                assert "Termina de completar la información" in v.lbl_titulo_pend.cget("text")
+                assert "Dirección" in v.lbl_detalle_pend.cget("text")
+                v.campos["direccion"].insert(0, "Calle 100 # 15-20")
+                v.campos["telefono"].insert(0, "3001234567")
+                v.guardar_empresa()
+                root.update()
+                assert "Información de la empresa completa" in v.lbl_titulo_pend.cget("text")
             elif clave == "facturacion":
                 v = p.vista_actual
                 primer_id = int(list(v.productos.keys())[0])
@@ -179,6 +201,9 @@ for rol, usuario in (("admin", ("administrador", "Clave1234")), ("cajero", ("caj
                 v2 = p.vista_actual
                 assert primer_id in v2.carrito and v2.carrito[primer_id]["cantidad"] == 7
                 assert v2.e_cliente.get() == "Cliente Prueba Persistencia"
+                v2._fijar_billete(50000)
+                assert v2.e_recibido.get() == "50.000"
+                v2._fijar_billete(None)
                 v2.vaciar()
                 assert len(v2.carrito) == 0
             print(f"OK   {rol:7s} {clave}")
