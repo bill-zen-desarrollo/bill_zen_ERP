@@ -57,15 +57,13 @@ def verificar_password_ficticio(password: str):
 
 def validar_password(password: str, confirmacion: str | None = None):
     if not password:
-        raise ErrorValidacion("La contraseña es obligatoria.")
+        raise ErrorValidacion("La clave es obligatoria.")
     if len(password) > _MAX_LEN_PASS:
-        raise ErrorValidacion(f"La contraseña no puede superar los {_MAX_LEN_PASS} caracteres.")
+        raise ErrorValidacion(f"La clave no puede superar los {_MAX_LEN_PASS} caracteres.")
     if confirmacion is not None and password != confirmacion:
-        raise ErrorValidacion("Las contraseñas no coinciden.")
-    if len(password) < 8:
-        raise ErrorValidacion("La contraseña debe tener al menos 8 caracteres.")
-    if not re.search(r"[A-Za-z]", password) or not re.search(r"\d", password):
-        raise ErrorValidacion("La contraseña debe combinar letras y números.")
+        raise ErrorValidacion("Las claves no coinciden.")
+    if len(password) < 5:
+        raise ErrorValidacion("La clave de acceso debe tener al menos 5 caracteres (puede ser solo numérica, ej. 12345).")
 
 
 def validar_username(username: str):

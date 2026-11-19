@@ -18,15 +18,21 @@ class Vista(ttk.Frame):
         self.cat_por_nombre = {f"{c['nombre']}  (IVA {c['iva_porcentaje']:.0f}%)": c for c in self.categorias}
         self.cat_filtro_mapa = {c["nombre"]: c["id_categoria"] for c in self.categorias}
 
-        cmp.encabezado(self, "Productos", "Crea y administra tu catálogo. El IVA se aplica según la categoría.").pack(anchor=W, pady=(0, 12))
+        cmp.encabezado(
+            self,
+            "Productos · Catálogo Maestro",
+            "Administra precios, costos, IVA por categoría, creación y desactivación. Los movimientos de stock se registran en Inventario.",
+        ).pack(anchor=W, pady=(0, 12))
         cuerpo = ttk.Frame(self)
         cuerpo.pack(fill=BOTH, expand=YES)
 
-        izq = ttk.Frame(cuerpo)
-        izq.pack(side=LEFT, fill=BOTH, expand=YES, padx=(0, 16))
-        barra = ttk.Frame(izq)
-        barra.pack(fill=X, pady=(0, 8))
-        self.e_buscar = ttk.Entry(barra)
+        card_izq = cmp.tarjeta(cuerpo, padding=20)
+        card_izq.pack(side=LEFT, fill=BOTH, expand=YES, padx=(0, 14))
+        izq = card_izq.interior
+
+        barra = ttk.Frame(izq, style="Tarjeta.TFrame")
+        barra.pack(fill=X, pady=(0, 10))
+        self.e_buscar = ttk.Entry(barra, font=(tema.FUENTE, 11))
         self.e_buscar.pack(side=LEFT, fill=X, expand=YES)
         cmp.vincular_busqueda(self, self.e_buscar, self.refrescar)
 
@@ -34,76 +40,87 @@ class Vista(ttk.Frame):
             barra,
             values=[self.TODAS_CATS] + list(self.cat_filtro_mapa.keys()),
             state="readonly",
-            width=22,
+            width=20,
+            font=(tema.FUENTE, 11),
         )
         self.cb_filtro_cat.set(self.TODAS_CATS)
         self.cb_filtro_cat.pack(side=LEFT, padx=(8, 0))
         self.cb_filtro_cat.bind("<<ComboboxSelected>>", lambda e: self.refrescar())
 
         self.var_inactivos = ttk.BooleanVar(value=False)
-        ttk.Checkbutton(barra, text="Ver inactivos", variable=self.var_inactivos, command=self.refrescar).pack(side=LEFT, padx=10)
-        ttk.Button(barra, text="Subir Excel", style="Info.TButton", command=self.importar_excel).pack(side=RIGHT, padx=(8, 0))
-        ttk.Button(barra, text="Bajar plantilla", style="Suave.TButton", command=self.descargar_plantilla).pack(side=RIGHT, padx=(8, 0))
+        ttk.Checkbutton(
+            barra,
+            text="Ver inactivos",
+            variable=self.var_inactivos,
+            command=self.refrescar,
+            style="Tarjeta.TCheckbutton",
+        ).pack(side=LEFT, padx=10)
+        ttk.Button(barra, text="Subir Excel", style="Info.TButton", command=self.importar_excel, padding=(12, 8)).pack(side=RIGHT, padx=(6, 0))
+        ttk.Button(barra, text="Bajar plantilla", style="Suave.TButton", command=self.descargar_plantilla, padding=(12, 8)).pack(side=RIGHT, padx=(6, 0))
         marco, self.tv = cmp.tabla(
             izq,
             [
                 ("codigo", "Código", 105, W),
-                ("nombre", "Producto", 240, W),
+                ("nombre", "Producto", 230, W),
                 ("cat", "Categoría", 145, W),
                 ("precio", "Precio", 95, E),
                 ("costo", "Costo", 95, E),
-                ("stock", "Stock", 65, E),
+                ("stock", "Stock", 70, E),
             ],
-            altura=17,
+            altura=15,
         )
         marco.pack(fill=BOTH, expand=YES)
         self.tv.bind("<<TreeviewSelect>>", lambda e: self.cargar_seleccion())
 
         # ---- Formulario ----
-        borde = cmp.tarjeta(cuerpo, padding=24)
-        borde.pack(side=LEFT, fill=Y)
+        der_wrap = ttk.Frame(cuerpo, width=390)
+        der_wrap.pack(side=LEFT, fill=Y)
+        der_wrap.pack_propagate(False)
+
+        borde = cmp.tarjeta(der_wrap, padding=20)
+        borde.pack(fill=BOTH, expand=YES)
         c = borde.interior
         self.lbl_modo = ttk.Label(c, text="Nuevo producto", style="TarjetaTitulo.TLabel")
-        self.lbl_modo.pack(anchor=W, pady=(0, 10))
-        self.e_codigo = cmp.campo(c, "Código de barras / SKU *", ancho=45)
-        self.e_nombre = cmp.campo(c, "Nombre del producto *", ancho=45)
-        
-        ttk.Label(c, text="Categoría * (define el IVA)", style="Tarjeta.TLabel", font=(tema.FUENTE, 9, "bold")).pack(anchor=W, pady=(12, 4))
+        self.lbl_modo.pack(anchor=W, pady=(0, 6))
+        self.e_codigo = cmp.campo(c, "Código de barras / SKU *", ancho=34)
+        self.e_nombre = cmp.campo(c, "Nombre del producto *", ancho=34)
+
+        ttk.Label(c, text="Categoría * (define el IVA)", style="FormLabel.TLabel").pack(anchor=W, pady=(6, 3))
         cat_frame = ttk.Frame(c, style="Tarjeta.TFrame")
-        cat_frame.pack(fill=X, pady=(0, 10))
-        self.cb_cat = ttk.Combobox(cat_frame, values=list(self.cat_por_nombre), state="readonly")
+        cat_frame.pack(fill=X, pady=(0, 6))
+        self.cb_cat = ttk.Combobox(cat_frame, values=list(self.cat_por_nombre), state="readonly", font=(tema.FUENTE, 11))
         self.cb_cat.pack(side=LEFT, fill=X, expand=YES, padx=(0, 8))
-        ttk.Button(cat_frame, text="+ Cat", style="Oro.TButton", command=self.nueva_categoria, width=6).pack(side=RIGHT)
-        
+        ttk.Button(cat_frame, text="+ Cat", style="Oro.TButton", command=self.nueva_categoria, width=6, padding=(10, 8)).pack(side=RIGHT)
+
         self.cb_cat.bind("<<ComboboxSelected>>", lambda e: self._pista_iva())
-        self.lbl_iva = ttk.Label(c, text="", style="Tarjeta.TLabel", foreground=tema.VERDE_CLARO, font=(tema.FUENTE, 9, "italic"))
-        self.lbl_iva.pack(anchor=W, pady=(0, 10))
-        
+        self.lbl_iva = ttk.Label(c, text="", style="Tarjeta.TLabel", foreground=tema.VERDE_CLARO, font=(tema.FUENTE, 10, "italic"), wraplength=340)
+        self.lbl_iva.pack(anchor=W, pady=(0, 4))
+
         fila = ttk.Frame(c, style="Tarjeta.TFrame")
-        fila.pack(fill=X, pady=(0, 10))
+        fila.pack(fill=X, pady=(0, 2))
         fila.columnconfigure((0, 1), weight=1)
         self.e_costo = cmp.campo(fila, "Costo proveedor *", 0, 0, 12)
         self.e_precio = cmp.campo(fila, "Precio de venta *", 0, 1, 12)
         self.e_costo.bind("<KeyRelease>", lambda e: self._pista_iva())
         self.e_precio.bind("<KeyRelease>", lambda e: self._pista_iva())
-        
+
         fila2 = ttk.Frame(c, style="Tarjeta.TFrame")
-        fila2.pack(fill=X, pady=(0, 10))
+        fila2.pack(fill=X, pady=(0, 2))
         fila2.columnconfigure((0, 1), weight=1)
         self.e_stock = cmp.campo(fila2, "Stock inicial", 0, 0, 12)
         self.e_minimo = cmp.campo(fila2, "Stock mínimo", 0, 1, 12)
         self.e_minimo.insert(0, "5")
-        
-        self.lbl_nota = ttk.Label(c, text="", style="Tarjeta.TLabel", foreground=tema.GRIS, wraplength=350, font=(tema.FUENTE, 8))
-        self.lbl_nota.pack(anchor=W, pady=(6, 0))
+
+        self.lbl_nota = ttk.Label(c, text="", style="Tarjeta.TLabel", foreground=tema.GRIS, wraplength=340, font=(tema.FUENTE, 9))
+        self.lbl_nota.pack(anchor=W, pady=(2, 0))
 
         btn_frame = ttk.Frame(c, style="Tarjeta.TFrame")
-        btn_frame.pack(fill=X, pady=(20, 10))
-        self.btn_guardar = ttk.Button(btn_frame, text="Crear producto", style="Zen.TButton", command=self.guardar)
+        btn_frame.pack(fill=X, pady=(10, 6))
+        self.btn_guardar = ttk.Button(btn_frame, text="Crear producto", style="Zen.TButton", command=self.guardar, padding=(12, 9))
         self.btn_guardar.pack(side=LEFT, fill=X, expand=YES, padx=(0, 4))
-        ttk.Button(btn_frame, text="Nuevo / Limpiar", style="Suave.TButton", command=self.limpiar).pack(side=LEFT, fill=X, expand=YES, padx=(4, 0))
-        
-        self.btn_estado = ttk.Button(c, text="Desactivar producto", style="Peligro.TButton", command=self.alternar_estado)
+        ttk.Button(btn_frame, text="Nuevo / Limpiar", style="Suave.TButton", command=self.limpiar, padding=(12, 9)).pack(side=LEFT, fill=X, expand=YES, padx=(4, 0))
+
+        self.btn_estado = ttk.Button(c, text="Desactivar producto", style="Peligro.TButton", command=self.alternar_estado, padding=(12, 9))
         self.btn_estado.pack(fill=X, pady=2)
 
         self.refrescar()
@@ -250,7 +267,7 @@ class Vista(ttk.Frame):
         self.e_stock.delete(0, END)
         self.e_stock.insert(0, p["stock"])
         self.e_stock.configure(state=DISABLED)
-        self.lbl_nota.configure(text="El stock solo cambia con «Entrada de mercancía» (Inventario) o al facturar. Costo y precio de venta sí puedes actualizarlos aquí.")
+        self.lbl_nota.configure(text="El stock solo se modifica mediante movimientos en el módulo «Inventario» (Kardex) o al facturar. Costo, precio, IVA y estado sí se administran aquí.")
         self.cb_cat.set(next(k for k, c in self.cat_por_nombre.items() if c["id_categoria"] == p["id_categoria"]))
         self._pista_iva()
         self.btn_estado.configure(state=NORMAL, text="Desactivar producto" if p["activo"] else "Reactivar producto")
@@ -300,11 +317,11 @@ class VentanaCategoria(ttk.Toplevel):
         super().__init__(title="Nueva categoría", master=padre.winfo_toplevel())
         self.al_guardar = al_guardar
         self.configure(background=tema.BEIGE)
-        self.geometry("380x330")
+        self.geometry("420x390")
         self.transient(padre.winfo_toplevel())
         m = ttk.Frame(self, padding=22)
         m.pack(fill=BOTH, expand=YES)
-        ttk.Label(m, text="Nueva categoría", style="Titulo.TLabel", font=(tema.FUENTE_TITULO, 15, "bold")).pack(anchor=W)
+        ttk.Label(m, text="Nueva categoría", style="Titulo.TLabel", font=(tema.FUENTE, 16, "bold")).pack(anchor=W)
         self.e_n = cmp.campo(m, "Nombre *", estilo_label="Fondo.TLabel")
         self.e_d = cmp.campo(m, "Descripción", estilo_label="Fondo.TLabel")
         self.e_iva = cmp.campo(m, "IVA % (0 para canasta familiar, 5, 19)", estilo_label="Fondo.TLabel")

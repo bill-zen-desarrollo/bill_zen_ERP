@@ -61,8 +61,8 @@ class Vista(ttk.Frame):
         saludo = Sesion.usuario["nombre_completo"].split()[0]
         cab = ttk.Frame(self)
         cab.pack(fill=X, pady=(0, 12))
-        ttk.Label(cab, text=f"Hola, {saludo}", style="Cursiva.TLabel").pack(side=LEFT)
-        ttk.Label(cab, text="  Así va tu negocio hoy", style="Subtitulo.TLabel").pack(side=LEFT, pady=(12, 0))
+        ttk.Label(cab, text=f"Hola, {saludo}", style="Titulo.TLabel").pack(side=LEFT)
+        ttk.Label(cab, text="  Así va tu negocio hoy", style="Subtitulo.TLabel").pack(side=LEFT, pady=(6, 0))
         ttk.Button(cab, text="Actualizar", style="Suave.TButton", command=self.dibujar).pack(side=RIGHT)
         if principal and hasattr(principal, "ir_a"):
             if licencia.permite_modulo("auditoria_movil"):

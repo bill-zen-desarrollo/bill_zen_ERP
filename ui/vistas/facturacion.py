@@ -186,23 +186,22 @@ class Vista(ttk.Frame):
             text="+ Aumentar",
             style="Zen.TButton",
             command=lambda: self.cambiar(1),
-            padding=(12, 6),
+            padding=(12, 7),
         ).pack(side=LEFT, padx=(0, 4))
         ttk.Button(
             fb,
             text="- Disminuir",
             style="Suave.TButton",
             command=lambda: self.cambiar(-1),
-            padding=(12, 6),
+            padding=(12, 7),
         ).pack(side=LEFT, padx=(0, 12))
 
         ttk.Label(
             fb,
             text="Cantidad exacta:",
-            style="Tarjeta.TLabel",
-            font=(tema.FUENTE, 9, "bold"),
+            style="FormLabel.TLabel",
         ).pack(side=LEFT)
-        self.e_cant_car = ttk.Entry(fb, width=6, justify=CENTER, font=(tema.FUENTE, 10, "bold"))
+        self.e_cant_car = ttk.Entry(fb, width=6, justify=CENTER, font=(tema.FUENTE, 11, "bold"))
         self.e_cant_car.pack(side=LEFT, padx=6)
         self.e_cant_car.bind("<Return>", lambda e: self.fijar_cantidad_carrito())
         ttk.Button(
@@ -210,7 +209,7 @@ class Vista(ttk.Frame):
             text="Aplicar",
             style="Oro.TButton",
             command=self.fijar_cantidad_carrito,
-            padding=(10, 6),
+            padding=(10, 7),
         ).pack(side=LEFT, padx=(0, 8))
 
         ttk.Button(
@@ -218,18 +217,18 @@ class Vista(ttk.Frame):
             text="Vaciar factura",
             style="Peligro.TButton",
             command=self.vaciar,
-            padding=(10, 6),
+            padding=(10, 7),
         ).pack(side=RIGHT)
         ttk.Button(
             fb,
             text="Quitar producto",
             style="Suave.TButton",
             command=self.quitar,
-            padding=(10, 6),
+            padding=(10, 7),
         ).pack(side=RIGHT, padx=(0, 6))
 
         # ================== 3. PANEL DERECHO: TOTALES Y COBRO ==================
-        borde = cmp.tarjeta(der, padding=18)
+        borde = cmp.tarjeta(der, padding=20)
         borde.pack(fill=BOTH, expand=YES)
         c = borde.interior
         ttk.Label(c, text="Resumen y Cobro", style="TarjetaTitulo.TLabel").pack(anchor=W, pady=(0, 8))
@@ -240,8 +239,8 @@ class Vista(ttk.Frame):
         self.lbl_total = self._fila_total(c, "TOTAL A PAGAR", grande=True)
         ttk.Separator(c).pack(fill=X, pady=8)
 
-        ttk.Label(c, text="Método de pago", style="Tarjeta.TLabel", font=(tema.FUENTE, 9, "bold")).pack(anchor=W, pady=(6, 2))
-        self.cb_pago = ttk.Combobox(c, values=fl.METODOS_PAGO, state="readonly", font=(tema.FUENTE, 10))
+        ttk.Label(c, text="Método de pago", style="FormLabel.TLabel").pack(anchor=W, pady=(6, 3))
+        self.cb_pago = ttk.Combobox(c, values=fl.METODOS_PAGO, state="readonly", font=(tema.FUENTE, 11))
         metodo_guardado = self._borrador.get("metodo_pago", "Efectivo")
         self.cb_pago.set(metodo_guardado if metodo_guardado in fl.METODOS_PAGO else "Efectivo")
         self.cb_pago.pack(fill=X)

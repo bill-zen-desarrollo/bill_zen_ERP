@@ -1,5 +1,6 @@
 """Facturación: emisión atómica de facturas (única vía para descontar stock) y anulación."""
 from database.conexion import consultar, consultar_uno, transaccion
+from logica.productos_logic import _registrar_kardex_y_sync
 from logica.seguridad import ROL_ADMIN, ROL_CAJERO, ErrorValidacion, Sesion, auditar, requiere_rol
 
 METODOS_PAGO = ("Efectivo", "Tarjeta", "Transferencia", "Nequi / Daviplata")
@@ -68,10 +69,15 @@ def emitir_factura(items, metodo_pago="Efectivo", recibido=0, cliente_doc="", cl
                 (id_factura, l["id_producto"], l["nombre"], l["cantidad"], l["precio"], l["iva_porcentaje"], l["costo"]))
             nuevo = l["stock"] - l["cantidad"]
             con.execute("UPDATE productos SET stock=? WHERE id_producto=?", (nuevo, l["id_producto"]))
-            con.execute(
-                """INSERT INTO movimientos_inventario (id_producto, tipo, cantidad, stock_final, referencia, id_usuario)
-                   VALUES (?, 'VENTA', ?, ?, ?, ?)""",
-                (l["id_producto"], -l["cantidad"], nuevo, numero, Sesion.id()))
+            _registrar_kardex_y_sync(
+                con,
+                id_producto=l["id_producto"],
+                movement_type="VENTA",
+                quantity=l["cantidad"],
+                previous_stock=l["stock"],
+                new_stock=nuevo,
+                reason=f"Factura {numero}",
+            )
         auditar("EMITIR_FACTURA", f"{numero} total {total:.0f}", con)
     return id_factura
 
@@ -88,10 +94,15 @@ def anular_factura(id_factura, motivo):
             stock = con.execute("SELECT stock FROM productos WHERE id_producto=?", (d["id_producto"],)).fetchone()[0]
             nuevo = stock + d["cantidad"]
             con.execute("UPDATE productos SET stock=? WHERE id_producto=?", (nuevo, d["id_producto"]))
-            con.execute(
-                """INSERT INTO movimientos_inventario (id_producto, tipo, cantidad, stock_final, referencia, id_usuario)
-                   VALUES (?, 'ANULACION', ?, ?, ?, ?)""",
-                (d["id_producto"], d["cantidad"], nuevo, f["numero"], Sesion.id()))
+            _registrar_kardex_y_sync(
+                con,
+                id_producto=d["id_producto"],
+                movement_type="DEVOLUCION",
+                quantity=d["cantidad"],
+                previous_stock=stock,
+                new_stock=nuevo,
+                reason=f"Anulación {f['numero']}: {motivo.strip()}",
+            )
         con.execute("UPDATE facturas SET estado='ANULADA' WHERE id_factura=?", (id_factura,))
         auditar("ANULAR_FACTURA", f"{f['numero']}: {motivo.strip()}", con)
 

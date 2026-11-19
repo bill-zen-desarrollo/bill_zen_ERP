@@ -43,7 +43,7 @@ class Vista(ttk.Frame):
 
         barra_fechas = ttk.Frame(cab)
         barra_fechas.pack(side=RIGHT, pady=(6, 0))
-        ttk.Label(barra_fechas, text="Desde:", style="Fondo.TLabel", font=(tema.FUENTE, 9, "bold")).pack(side=LEFT)
+        ttk.Label(barra_fechas, text="Desde:", style="FormLabelFondo.TLabel").pack(side=LEFT)
         self.de_desde = ttk.DateEntry(
             barra_fechas,
             dateformat="%Y-%m-%d",
@@ -54,7 +54,7 @@ class Vista(ttk.Frame):
         self.de_desde.pack(side=LEFT, padx=(4, 8))
         self.e_desde = self.de_desde.entry
 
-        ttk.Label(barra_fechas, text="Hasta:", style="Fondo.TLabel", font=(tema.FUENTE, 9, "bold")).pack(side=LEFT)
+        ttk.Label(barra_fechas, text="Hasta:", style="FormLabelFondo.TLabel").pack(side=LEFT)
         self.de_hasta = ttk.DateEntry(
             barra_fechas,
             dateformat="%Y-%m-%d",
@@ -70,11 +70,11 @@ class Vista(ttk.Frame):
         self.de_desde.bind("<<DateEntrySelected>>", lambda e: self.refrescar())
         self.de_hasta.bind("<<DateEntrySelected>>", lambda e: self.refrescar())
 
-        ttk.Button(barra_fechas, text="Hoy", style="Suave.TButton", command=self._rango_hoy, padding=(8, 5)).pack(side=LEFT, padx=2)
-        ttk.Button(barra_fechas, text="Mes", style="Suave.TButton", command=self._rango_mes, padding=(8, 5)).pack(side=LEFT, padx=2)
-        ttk.Button(barra_fechas, text="Mes ant.", style="Suave.TButton", command=self._rango_mes_anterior, padding=(8, 5)).pack(side=LEFT, padx=2)
-        ttk.Button(barra_fechas, text="Actualizar", style="Zen.TButton", command=self.refrescar, padding=(10, 5)).pack(side=LEFT, padx=(6, 4))
-        ttk.Button(barra_fechas, text="Exportar CSV", style="Oro.TButton", command=self.exportar_contabilidad, padding=(10, 5)).pack(side=LEFT)
+        ttk.Button(barra_fechas, text="Hoy", style="Suave.TButton", command=self._rango_hoy, padding=(10, 6)).pack(side=LEFT, padx=2)
+        ttk.Button(barra_fechas, text="Mes", style="Suave.TButton", command=self._rango_mes, padding=(10, 6)).pack(side=LEFT, padx=2)
+        ttk.Button(barra_fechas, text="Mes ant.", style="Suave.TButton", command=self._rango_mes_anterior, padding=(10, 6)).pack(side=LEFT, padx=2)
+        ttk.Button(barra_fechas, text="Actualizar", style="Zen.TButton", command=self.refrescar, padding=(12, 6)).pack(side=LEFT, padx=(6, 4))
+        ttk.Button(barra_fechas, text="Exportar CSV", style="Oro.TButton", command=self.exportar_contabilidad, padding=(12, 6)).pack(side=LEFT)
 
         # ================== FILA DE 5 TARJETAS KPI FINANCIERAS ==================
         self.fila_kpi = ttk.Frame(self)
@@ -138,13 +138,14 @@ class Vista(ttk.Frame):
     # PESTAÑA 1: REGISTRO DE EGRESOS, SERVICIOS Y CUENTAS POR PAGAR
     # ------------------------------------------------------------------
     def _construir_tab_egresos(self):
-        izq = ttk.Frame(self.tab_egresos)
-        izq.pack(side=LEFT, fill=BOTH, expand=YES, padx=(0, 14))
+        card_izq = cmp.tarjeta(self.tab_egresos, padding=16)
+        card_izq.pack(side=LEFT, fill=BOTH, expand=YES, padx=(0, 14))
+        izq = card_izq.interior
 
         # Barra de filtros de egresos
-        barra_f = ttk.Frame(izq)
-        barra_f.pack(fill=X, pady=(0, 8))
-        self.e_buscar_gasto = ttk.Entry(barra_f)
+        barra_f = ttk.Frame(izq, style="Tarjeta.TFrame")
+        barra_f.pack(fill=X, pady=(0, 10))
+        self.e_buscar_gasto = ttk.Entry(barra_f, font=(tema.FUENTE, 11))
         self.e_buscar_gasto.pack(side=LEFT, fill=X, expand=YES)
         cmp.vincular_busqueda(self, self.e_buscar_gasto, self.refrescar_tabla_gastos)
 
@@ -152,7 +153,8 @@ class Vista(ttk.Frame):
             barra_f,
             values=[self.TODAS_CATS] + list(rl.CATEGORIAS_GASTO_UI),
             state="readonly",
-            width=26,
+            width=24,
+            font=(tema.FUENTE, 11),
         )
         self.cb_filtro_cat.set(self.TODAS_CATS)
         self.cb_filtro_cat.pack(side=LEFT, padx=(8, 0))
@@ -162,15 +164,16 @@ class Vista(ttk.Frame):
             barra_f,
             values=[self.TODOS_ESTADOS, "PAGADO", "PENDIENTE"],
             state="readonly",
-            width=16,
+            width=15,
+            font=(tema.FUENTE, 11),
         )
         self.cb_filtro_est.set(self.TODOS_ESTADOS)
         self.cb_filtro_est.pack(side=LEFT, padx=(8, 0))
         self.cb_filtro_est.bind("<<ComboboxSelected>>", lambda e: self.refrescar_tabla_gastos())
 
         cols_gastos = [
-            ("fecha", "Fecha", 90, W),
-            ("concepto", "Concepto / Servicio", 185, W),
+            ("fecha", "Fecha", 92, W),
+            ("concepto", "Concepto / Servicio", 180, W),
             ("proveedor", "Proveedor / Entidad", 140, W),
             ("categoria", "Categoría", 150, W),
             ("metodo_pago", "Medio Pago", 105, W),
@@ -178,27 +181,31 @@ class Vista(ttk.Frame):
             ("estado", "Estado", 85, W),
             ("valor", "Valor", 95, E),
         ]
-        marco_tv, self.tv_gastos = cmp.tabla(izq, cols_gastos, altura=13)
+        marco_tv, self.tv_gastos = cmp.tabla(izq, cols_gastos, altura=11)
         marco_tv.pack(fill=BOTH, expand=YES)
 
-        acciones_inf = ttk.Frame(izq)
-        acciones_inf.pack(fill=X, pady=(8, 0))
+        acciones_inf = ttk.Frame(izq, style="Tarjeta.TFrame")
+        acciones_inf.pack(fill=X, pady=(10, 0))
         ttk.Label(
             acciones_inf,
             text="Nota: Las filas resaltadas en rojo están PENDIENTES por pagar.",
-            style="Subtitulo.TLabel",
+            style="Tarjeta.TLabel",
+            foreground=tema.GRIS,
+            font=(tema.FUENTE, 10),
         ).pack(side=LEFT)
         ttk.Button(
             acciones_inf,
             text="Eliminar seleccionado",
             style="Peligro.TButton",
             command=self.eliminar,
+            padding=(12, 8),
         ).pack(side=RIGHT)
         ttk.Button(
             acciones_inf,
-            text="Marcar seleccionado como Pagado",
+            text="Marcar como Pagado",
             style="Oro.TButton",
             command=self.marcar_pagado,
+            padding=(12, 8),
         ).pack(side=RIGHT, padx=(0, 8))
 
         # Formulario derecho para registrar egreso o cuenta por pagar
@@ -214,40 +221,41 @@ class Vista(ttk.Frame):
         self.e_fecha.insert(0, date.today().isoformat())
         self.e_comprobante = cmp.campo(fila_f1, "N° Recibo / Factura", 0, 1, 14)
 
-        self.e_concepto = cmp.campo(c, "Concepto (ej. Recibo de Luz / Internet / Arriendo) *", ancho=34)
-        self.e_proveedor = cmp.campo(c, "Proveedor o Beneficiario (ej. Enel / Acueducto)", ancho=34)
+        self.e_concepto = cmp.campo(c, "Concepto (ej. Luz / Internet / Arriendo) *", ancho=32)
+        self.e_proveedor = cmp.campo(c, "Proveedor / Beneficiario (ej. Enel)", ancho=32)
 
-        ttk.Label(c, text="Categoría del egreso *", style="Tarjeta.TLabel", font=(tema.FUENTE, 9, "bold")).pack(anchor=W, pady=(6, 2))
-        self.cb_cat = ttk.Combobox(c, values=rl.CATEGORIAS_GASTO_UI, state="readonly", width=34)
+        ttk.Label(c, text="Categoría del egreso *", style="FormLabel.TLabel").pack(anchor=W, pady=(4, 2))
+        self.cb_cat = ttk.Combobox(c, values=rl.CATEGORIAS_GASTO_UI, state="readonly", width=32, font=(tema.FUENTE, 11))
         self.cb_cat.set(rl.CATEGORIAS_GASTO_UI[0])
-        self.cb_cat.pack(fill=X, pady=(0, 6))
+        self.cb_cat.pack(fill=X, pady=(0, 4))
 
         fila_f2 = ttk.Frame(c, style="Tarjeta.TFrame")
-        fila_f2.pack(fill=X, pady=(4, 4))
+        fila_f2.pack(fill=X, pady=(2, 2))
         fila_f2.columnconfigure((0, 1), weight=1)
 
         m_met = ttk.Frame(fila_f2, style="Tarjeta.TFrame")
         m_met.grid(row=0, column=0, sticky=EW, padx=(0, 4))
-        ttk.Label(m_met, text="Medio de pago *", style="Tarjeta.TLabel", font=(tema.FUENTE, 9, "bold")).pack(anchor=W)
-        self.cb_metodo = ttk.Combobox(m_met, values=rl.METODOS_PAGO_GASTO, state="readonly", width=15)
+        ttk.Label(m_met, text="Medio de pago *", style="FormLabel.TLabel").pack(anchor=W)
+        self.cb_metodo = ttk.Combobox(m_met, values=rl.METODOS_PAGO_GASTO, state="readonly", width=14, font=(tema.FUENTE, 11))
         self.cb_metodo.set("Efectivo")
         self.cb_metodo.pack(fill=X, pady=(2, 0))
 
         m_est = ttk.Frame(fila_f2, style="Tarjeta.TFrame")
         m_est.grid(row=0, column=1, sticky=EW, padx=(4, 0))
-        ttk.Label(m_est, text="Estado del pago *", style="Tarjeta.TLabel", font=(tema.FUENTE, 9, "bold")).pack(anchor=W)
-        self.cb_estado = ttk.Combobox(m_est, values=rl.ESTADOS_GASTO, state="readonly", width=15)
+        ttk.Label(m_est, text="Estado del pago *", style="FormLabel.TLabel").pack(anchor=W)
+        self.cb_estado = ttk.Combobox(m_est, values=rl.ESTADOS_GASTO, state="readonly", width=14, font=(tema.FUENTE, 11))
         self.cb_estado.set("PAGADO")
         self.cb_estado.pack(fill=X, pady=(2, 0))
 
-        self.e_valor = cmp.campo(c, "Valor total ($) *", ancho=34)
+        self.e_valor = cmp.campo(c, "Valor total ($) *", ancho=32)
         self.var_es_fijo = ttk.BooleanVar(value=False)
         ttk.Checkbutton(
             c,
             text="Es cuenta fija mensual (recordar cada mes)",
             variable=self.var_es_fijo,
+            style="Tarjeta.TCheckbutton",
         ).pack(anchor=W, pady=(2, 6))
-        ttk.Button(c, text="Guardar egreso", style="Zen.TButton", command=self.guardar).pack(fill=X, pady=(4, 0))
+        ttk.Button(c, text="Guardar egreso", style="Zen.TButton", command=self.guardar, padding=(14, 9)).pack(fill=X, pady=(2, 0))
 
     # ------------------------------------------------------------------
     # PESTAÑA 2: ESTADO DE RESULTADOS (P&G), PUNTO DE EQUILIBRIO Y CAJA
@@ -354,45 +362,47 @@ class Vista(ttk.Frame):
     # ------------------------------------------------------------------
     def _construir_tab_fijos(self):
         self.id_fijo_editando = None
-        izq = ttk.Frame(self.tab_fijos)
-        izq.pack(side=LEFT, fill=BOTH, expand=YES, padx=(0, 14))
+        card_izq = cmp.tarjeta(self.tab_fijos, padding=16)
+        card_izq.pack(side=LEFT, fill=BOTH, expand=YES, padx=(0, 14))
+        izq = card_izq.interior
 
         ttk.Label(
             izq,
-            text="Calendario de Gastos Fijos Mensuales (Arriendo, Servicios, Internet, Nómina, etc.)",
+            text="Calendario de Gastos Fijos Mensuales (Arriendo, Servicios, Internet, Nómina)",
             style="TarjetaTitulo.TLabel",
-            background=tema.BEIGE,
-        ).pack(anchor=W, pady=(0, 6))
+        ).pack(anchor=W, pady=(0, 8))
 
         cols_fijos = [
-            ("dia", "Día Pago", 75, CENTER),
-            ("concepto", "Cuenta Fija", 165, W),
-            ("descripcion", "Descripción / Nota", 180, W),
+            ("dia", "Día Pago", 85, CENTER),
+            ("concepto", "Cuenta Fija", 160, W),
+            ("descripcion", "Descripción / Nota", 170, W),
             ("proveedor", "Proveedor / Entidad", 130, W),
             ("categoria", "Categoría", 145, W),
-            ("valor", "Valor Mensual", 100, E),
-            ("estado_mes", "Estado Este Mes", 175, W),
+            ("valor", "Valor Mensual", 110, E),
+            ("estado_mes", "Estado Este Mes", 165, W),
         ]
-        m_tv_fijos, self.tv_fijos = cmp.tabla(izq, cols_fijos, altura=12)
+        m_tv_fijos, self.tv_fijos = cmp.tabla(izq, cols_fijos, altura=11)
         m_tv_fijos.pack(fill=BOTH, expand=YES)
         self.tv_fijos.bind("<<TreeviewSelect>>", lambda e: self.cargar_fijo_seleccionado())
 
-        barra_pago_fijo = ttk.Frame(izq)
-        barra_pago_fijo.pack(fill=X, pady=(8, 0))
-        ttk.Label(barra_pago_fijo, text="Valor real a pagar hoy ($):", style="Fondo.TLabel", font=(tema.FUENTE, 9, "bold")).pack(side=LEFT)
-        self.e_valor_pago_fijo = ttk.Entry(barra_pago_fijo, width=14)
+        barra_pago_fijo = ttk.Frame(izq, style="Tarjeta.TFrame")
+        barra_pago_fijo.pack(fill=X, pady=(10, 0))
+        ttk.Label(barra_pago_fijo, text="Valor real a pagar hoy ($):", style="FormLabel.TLabel").pack(side=LEFT)
+        self.e_valor_pago_fijo = ttk.Entry(barra_pago_fijo, width=14, font=(tema.FUENTE, 11))
         self.e_valor_pago_fijo.pack(side=LEFT, padx=(6, 10))
         ttk.Button(
             barra_pago_fijo,
-            text="Registrar pago de este mes",
+            text="Registrar pago del mes",
             style="Oro.TButton",
             command=self.pagar_fijo_mes,
+            padding=(12, 8),
         ).pack(side=LEFT)
         ttk.Button(
             barra_pago_fijo,
             text="Eliminar cuenta fija",
             style="Peligro.TButton",
             command=self.eliminar_fijo,
+            padding=(12, 8),
         ).pack(side=RIGHT)
 
         # Formulario derecho para crear / editar cuenta fija mensual
@@ -402,45 +412,45 @@ class Vista(ttk.Frame):
         self.lbl_modo_fijo = ttk.Label(c, text="Nueva Cuenta Fija Mensual", style="TarjetaTitulo.TLabel")
         self.lbl_modo_fijo.pack(anchor=W, pady=(0, 4))
 
-        self.e_fijo_concepto = cmp.campo(c, "Nombre de la cuenta fija (ej. Arriendo Local / Luz) *", ancho=34)
-        self.e_fijo_desc = cmp.campo(c, "Descripción adicional (ej. Contrato #102 / Medidor)", ancho=34)
-        self.e_fijo_prov = cmp.campo(c, "Proveedor / Entidad (ej. Enel / Movistar)", ancho=34)
+        self.e_fijo_concepto = cmp.campo(c, "Nombre de la cuenta fija (ej. Arriendo / Luz) *", ancho=32)
+        self.e_fijo_desc = cmp.campo(c, "Descripción adicional (ej. Contrato #102)", ancho=32)
+        self.e_fijo_prov = cmp.campo(c, "Proveedor / Entidad (ej. Enel / Movistar)", ancho=32)
 
-        ttk.Label(c, text="Categoría *", style="Tarjeta.TLabel", font=(tema.FUENTE, 9, "bold")).pack(anchor=W, pady=(4, 2))
-        self.cb_fijo_cat = ttk.Combobox(c, values=rl.CATEGORIAS_GASTO_UI, state="readonly", width=34)
+        ttk.Label(c, text="Categoría *", style="FormLabel.TLabel").pack(anchor=W, pady=(4, 2))
+        self.cb_fijo_cat = ttk.Combobox(c, values=rl.CATEGORIAS_GASTO_UI, state="readonly", width=32, font=(tema.FUENTE, 11))
         self.cb_fijo_cat.set(rl.CATEGORIAS_GASTO_UI[0])
-        self.cb_fijo_cat.pack(fill=X, pady=(0, 6))
+        self.cb_fijo_cat.pack(fill=X, pady=(0, 4))
 
         fila_dias = ttk.Frame(c, style="Tarjeta.TFrame")
-        fila_dias.pack(fill=X, pady=(4, 6))
+        fila_dias.pack(fill=X, pady=(2, 4))
         fila_dias.columnconfigure((0, 1), weight=1)
 
         m_dia = ttk.Frame(fila_dias, style="Tarjeta.TFrame")
         m_dia.grid(row=0, column=0, sticky=EW, padx=(0, 4))
-        ttk.Label(m_dia, text="Día de pago (1-31) *", style="Tarjeta.TLabel", font=(tema.FUENTE, 9, "bold")).pack(anchor=W)
-        self.sp_fijo_dia = ttk.Spinbox(m_dia, from_=1, to=31, width=10)
+        ttk.Label(m_dia, text="Día de pago (1-31) *", style="FormLabel.TLabel").pack(anchor=W)
+        self.sp_fijo_dia = ttk.Spinbox(m_dia, from_=1, to=31, width=10, font=(tema.FUENTE, 11))
         self.sp_fijo_dia.set("5")
         self.sp_fijo_dia.pack(fill=X, pady=(2, 0))
 
         m_aviso = ttk.Frame(fila_dias, style="Tarjeta.TFrame")
         m_aviso.grid(row=0, column=1, sticky=EW, padx=(4, 0))
-        ttk.Label(m_aviso, text="Avisar antes (días) *", style="Tarjeta.TLabel", font=(tema.FUENTE, 9, "bold")).pack(anchor=W)
-        self.sp_fijo_aviso = ttk.Spinbox(m_aviso, from_=1, to=15, width=10)
+        ttk.Label(m_aviso, text="Avisar antes (días) *", style="FormLabel.TLabel").pack(anchor=W)
+        self.sp_fijo_aviso = ttk.Spinbox(m_aviso, from_=1, to=15, width=10, font=(tema.FUENTE, 11))
         self.sp_fijo_aviso.set("5")
         self.sp_fijo_aviso.pack(fill=X, pady=(2, 0))
 
-        ttk.Label(c, text="Medio de pago habitual", style="Tarjeta.TLabel", font=(tema.FUENTE, 9, "bold")).pack(anchor=W, pady=(4, 2))
-        self.cb_fijo_metodo = ttk.Combobox(c, values=rl.METODOS_PAGO_GASTO, state="readonly", width=34)
+        ttk.Label(c, text="Medio de pago habitual", style="FormLabel.TLabel").pack(anchor=W, pady=(2, 2))
+        self.cb_fijo_metodo = ttk.Combobox(c, values=rl.METODOS_PAGO_GASTO, state="readonly", width=32, font=(tema.FUENTE, 11))
         self.cb_fijo_metodo.set("Transferencia")
         self.cb_fijo_metodo.pack(fill=X, pady=(0, 4))
 
-        self.e_fijo_valor = cmp.campo(c, "Valor mensual estimado ($) *", ancho=34)
+        self.e_fijo_valor = cmp.campo(c, "Valor mensual estimado ($) *", ancho=32)
 
         btns_fijo = ttk.Frame(c, style="Tarjeta.TFrame")
-        btns_fijo.pack(fill=X, pady=(8, 0))
-        self.btn_guardar_fijo = ttk.Button(btns_fijo, text="Guardar cuenta fija", style="Zen.TButton", command=self.guardar_fijo)
+        btns_fijo.pack(fill=X, pady=(6, 0))
+        self.btn_guardar_fijo = ttk.Button(btns_fijo, text="Guardar cuenta fija", style="Zen.TButton", command=self.guardar_fijo, padding=(12, 8))
         self.btn_guardar_fijo.pack(side=LEFT, fill=X, expand=YES, padx=(0, 4))
-        ttk.Button(btns_fijo, text="Limpiar", style="Suave.TButton", command=self.limpiar_fijo).pack(side=LEFT, padx=(4, 0))
+        ttk.Button(btns_fijo, text="Limpiar", style="Suave.TButton", command=self.limpiar_fijo, padding=(12, 8)).pack(side=LEFT, padx=(4, 0))
 
     # ------------------------------------------------------------------
     # ACCIONES Y REFRESCO DE DATOS
@@ -537,9 +547,10 @@ class Vista(ttk.Frame):
             ("(=) Ventas netas (sin IVA)", r["ventas_netas"], True, tema.VERDE_OSCURO),
             ("(−) Costo de mercancía vendida (CMV)", r["costo_ventas"], False, tema.TEXTO),
             ("(=) UTILIDAD BRUTA", r["utilidad_bruta"], True, tema.VERDE),
-            ("(−) Gastos operativos pagados", r["gastos_pagados"], False, tema.TEXTO),
-            ("(−) Cuentas por pagar causadas", r["gastos_pendientes"], False, tema.ROJO if r["gastos_pendientes"] > 0 else tema.TEXTO),
+            ("(−) Gastos operativos pagados", r["gastos_op_pagados"], False, tema.TEXTO),
+            ("(−) Cuentas por pagar causadas", r["gastos_op_pendientes"], False, tema.ROJO if r["gastos_op_pendientes"] > 0 else tema.TEXTO),
             ("(=) UTILIDAD NETA DEL PERIODO", r["utilidad_neta"], True, tema.VERDE if r["utilidad_neta"] >= 0 else tema.ROJO),
+            ("Compras de stock (reflejadas en Caja y CMV)", r["compras_stock"], False, tema.GRIS),
             ("Punto de equilibrio (meta ventas)", r["punto_equilibrio"], True, tema.DORADO),
         ]
         for idx, (texto, val, negrita, color) in enumerate(lineas_pyg, start=1):

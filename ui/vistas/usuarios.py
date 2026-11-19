@@ -23,33 +23,50 @@ class Vista(ttk.Frame):
         cmp.encabezado(self, "Usuarios", sub).pack(anchor=W, pady=(0, 12))
         cuerpo = ttk.Frame(self)
         cuerpo.pack(fill=BOTH, expand=YES)
-        marco, self.tv = cmp.tabla(cuerpo, [("u", "Usuario", 110, W), ("n", "Nombre", 200, W), ("r", "Rol", 110, W),
-                                            ("e", "Estado", 80, W), ("a", "Último acceso", 150, W)], altura=17)
-        marco.pack(side=LEFT, fill=BOTH, expand=YES, padx=(0, 16))
+
+        card_izq = cmp.tarjeta(cuerpo, padding=20)
+        card_izq.pack(side=LEFT, fill=BOTH, expand=YES, padx=(0, 16))
+        ttk.Label(card_izq.interior, text="Usuarios registrados", style="TarjetaTitulo.TLabel").pack(anchor=W, pady=(0, 10))
+        marco, self.tv = cmp.tabla(
+            card_izq.interior,
+            [
+                ("u", "Usuario", 115, W),
+                ("n", "Nombre", 200, W),
+                ("r", "Rol", 115, W),
+                ("e", "Estado", 85, W),
+                ("a", "Último acceso", 160, W),
+            ],
+            altura=15,
+        )
+        marco.pack(fill=BOTH, expand=YES)
         self.tv.bind("<<TreeviewSelect>>", lambda e: self.cargar())
 
-        borde = cmp.tarjeta(cuerpo, padding=24)
-        borde.pack(side=LEFT, fill=Y)
+        der_wrap = ttk.Frame(cuerpo, width=380)
+        der_wrap.pack(side=LEFT, fill=Y)
+        der_wrap.pack_propagate(False)
+
+        borde = cmp.tarjeta(der_wrap, padding=20)
+        borde.pack(fill=BOTH, expand=YES)
         c = borde.interior
         self.lbl = ttk.Label(c, text="Nuevo usuario", style="TarjetaTitulo.TLabel")
-        self.lbl.pack(anchor=W, pady=(0, 10))
-        self.e_user = cmp.campo(c, "Usuario *", ancho=45)
-        self.e_nombre = cmp.campo(c, "Nombre completo *", ancho=45)
-        ttk.Label(c, text="Rol", style="Tarjeta.TLabel", font=(tema.FUENTE, 9, "bold")).pack(anchor=W, pady=(12, 4))
-        ttk.Label(c, text="Cajero (por defecto)", foreground=tema.GRIS).pack(anchor=W, pady=(0, 10))
-        self.e_pass = cmp.campo(c, "Contraseña (mín. 8, letras y números)", ancho=45, show="●")
-        self.e_pass2 = cmp.campo(c, "Confirmar contraseña", ancho=45, show="●")
+        self.lbl.pack(anchor=W, pady=(0, 8))
+        self.e_user = cmp.campo(c, "Usuario *", ancho=32)
+        self.e_nombre = cmp.campo(c, "Nombre completo *", ancho=32)
+        ttk.Label(c, text="Rol", style="FormLabel.TLabel").pack(anchor=W, pady=(6, 2))
+        ttk.Label(c, text="Cajero (por defecto)", style="Tarjeta.TLabel", foreground=tema.GRIS).pack(anchor=W, pady=(0, 6))
+        self.e_pass = cmp.campo(c, "Clave de acceso (mín. 5 caracteres)", ancho=32, show="●")
+        self.e_pass2 = cmp.campo(c, "Confirmar clave", ancho=32, show="●")
         self.var_activo = ttk.BooleanVar(value=True)
-        self.chk = ttk.Checkbutton(c, text="Cuenta activa", variable=self.var_activo)
-        self.chk.pack(anchor=W, pady=(10, 0))
-        
+        self.chk = ttk.Checkbutton(c, text="Cuenta activa", variable=self.var_activo, style="Tarjeta.TCheckbutton")
+        self.chk.pack(anchor=W, pady=(6, 0))
+
         btn_frame = ttk.Frame(c, style="Tarjeta.TFrame")
-        btn_frame.pack(fill=X, pady=(20, 10))
-        self.btn_guardar = ttk.Button(btn_frame, text="Crear usuario", style="Zen.TButton", command=self.guardar)
+        btn_frame.pack(fill=X, pady=(14, 8))
+        self.btn_guardar = ttk.Button(btn_frame, text="Crear usuario", style="Zen.TButton", command=self.guardar, padding=(12, 9))
         self.btn_guardar.pack(side=LEFT, fill=X, expand=YES, padx=(0, 4))
-        ttk.Button(btn_frame, text="Nuevo / Limpiar", style="Suave.TButton", command=self.limpiar).pack(side=LEFT, fill=X, expand=YES, padx=(4, 0))
-        
-        ttk.Button(c, text="Restablecer contraseña", style="Oro.TButton", command=self.resetear).pack(fill=X, pady=2)
+        ttk.Button(btn_frame, text="Nuevo / Limpiar", style="Suave.TButton", command=self.limpiar, padding=(12, 9)).pack(side=LEFT, fill=X, expand=YES, padx=(4, 0))
+
+        ttk.Button(c, text="Restablecer contraseña", style="Oro.TButton", command=self.resetear, padding=(12, 9)).pack(fill=X, pady=2)
         
         self.refrescar()
 

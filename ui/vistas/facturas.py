@@ -17,28 +17,44 @@ class Vista(ttk.Frame):
         sub = "Todas las ventas del negocio" if Sesion.es_admin() else "Tus ventas"
         cmp.encabezado(self, "Facturas emitidas", sub).pack(anchor=W, pady=(0, 12))
 
-        f = ttk.Frame(self)
-        f.pack(fill=X, pady=(0, 8))
-        ttk.Label(f, text="Desde", style="Fondo.TLabel").pack(side=LEFT)
-        self.e_desde = ttk.Entry(f, width=12)
-        self.e_desde.insert(0, (date.today() - timedelta(days=30)).isoformat())
-        self.e_desde.pack(side=LEFT, padx=(4, 12))
-        ttk.Label(f, text="Hasta", style="Fondo.TLabel").pack(side=LEFT)
-        self.e_hasta = ttk.Entry(f, width=12)
-        self.e_hasta.insert(0, date.today().isoformat())
-        self.e_hasta.pack(side=LEFT, padx=(4, 12))
-        self.e_texto = ttk.Entry(f, width=24)
-        self.e_texto.pack(side=LEFT, padx=(0, 8))
-        ttk.Label(f, text="(número o cliente)", style="Subtitulo.TLabel").pack(side=LEFT)
-        ttk.Button(f, text="Buscar", style="Zen.TButton", command=self.refrescar).pack(side=LEFT, padx=10)
+        card = cmp.tarjeta(self, padding=20)
+        card.pack(fill=BOTH, expand=YES)
+        cont = card.interior
 
-        marco, self.tv = cmp.tabla(self, [("n", "Número", 110, W), ("f", "Fecha", 150, W), ("c", "Cliente", 200, W),
-                                          ("m", "Pago", 130, W), ("t", "Total", 110, E), ("e", "Estado", 90, W), ("u", "Cajero", 100, W)], altura=16)
+        f = ttk.Frame(cont, style="Tarjeta.TFrame")
+        f.pack(fill=X, pady=(0, 12))
+        ttk.Label(f, text="Desde", style="FormLabel.TLabel").pack(side=LEFT)
+        self.e_desde = ttk.Entry(f, width=12, font=(tema.FUENTE, 11))
+        self.e_desde.insert(0, (date.today() - timedelta(days=30)).isoformat())
+        self.e_desde.pack(side=LEFT, padx=(6, 12))
+        ttk.Label(f, text="Hasta", style="FormLabel.TLabel").pack(side=LEFT)
+        self.e_hasta = ttk.Entry(f, width=12, font=(tema.FUENTE, 11))
+        self.e_hasta.insert(0, date.today().isoformat())
+        self.e_hasta.pack(side=LEFT, padx=(6, 12))
+        self.e_texto = ttk.Entry(f, width=22, font=(tema.FUENTE, 11))
+        self.e_texto.pack(side=LEFT, fill=X, expand=YES, padx=(0, 8))
+        cmp.vincular_busqueda(self, self.e_texto, self.refrescar, espera=250)
+        ttk.Label(f, text="(número o cliente)", style="Tarjeta.TLabel", foreground=tema.GRIS, font=(tema.FUENTE, 10)).pack(side=LEFT)
+        ttk.Button(f, text="Buscar", style="Zen.TButton", command=self.refrescar, padding=(14, 8)).pack(side=LEFT, padx=(10, 0))
+
+        marco, self.tv = cmp.tabla(
+            cont,
+            [
+                ("n", "Número", 115, W),
+                ("f", "Fecha", 155, W),
+                ("c", "Cliente", 200, W),
+                ("m", "Pago", 130, W),
+                ("t", "Total", 115, E),
+                ("e", "Estado", 95, W),
+                ("u", "Cajero", 105, W),
+            ],
+            altura=14,
+        )
         marco.pack(fill=BOTH, expand=YES)
         self.tv.bind("<Double-1>", lambda e: self.ver())
 
-        b = ttk.Frame(self)
-        b.pack(fill=X, pady=(10, 0))
+        b = ttk.Frame(cont, style="Tarjeta.TFrame")
+        b.pack(fill=X, pady=(12, 0))
         ttk.Button(b, text="Ver / Imprimir", style="Oro.TButton", command=self.ver).pack(side=LEFT)
         if Sesion.es_admin():
             ttk.Button(b, text="Anular factura", style="Peligro.TButton", command=self.anular).pack(side=LEFT, padx=8)

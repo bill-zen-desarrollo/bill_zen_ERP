@@ -1,13 +1,14 @@
 """Vista exclusiva del Administrador: Auditoría Remota de Solo Lectura mediante Código QR y Túnel."""
 import time
 import tkinter as tk
+import webbrowser
 from PIL import Image, ImageTk
 
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
 from database.conexion import consultar
-from logica import mobile_server as ms
+from logica import auth_logic, mobile_server as ms
 from logica.seguridad import ROL_ADMIN, ErrorPermiso, Sesion
 from ui import componentes as cmp
 from ui import tema
@@ -151,10 +152,33 @@ class Vista(ttk.Frame):
         )
         self._fila_dato(
             est,
-            "Control de Acceso:",
-            "Exclusivo Rol Administrador",
+            "Credenciales de Ingreso:",
+            f"Usuario '{auth_logic.USUARIO_ADMIN_DEFECTO}' (clave del rol administrador)",
             color_valor=tema.VERDE_OSCURO,
         )
+
+        # Aviso de configuración automática en segundo plano + respaldo oficial
+        aviso_cf = tk.Frame(est, bg=tema.BEIGE, padx=12, pady=8, highlightthickness=1, highlightbackground=tema.BEIGE_OSCURO)
+        aviso_cf.pack(fill=X, pady=(8, 4))
+        tk.Label(
+            aviso_cf,
+            text="Túnel Cloudflare automático: Bill Zen descarga y ejecuta el puente seguro en segundo plano sin abrir instaladores.",
+            bg=tema.BEIGE,
+            fg=tema.VERDE_OSCURO,
+            font=(tema.FUENTE, 9, "bold"),
+            wraplength=520,
+            justify=LEFT,
+        ).pack(anchor=W)
+        lbl_link_cf = tk.Label(
+            aviso_cf,
+            text=f"Descarga manual de respaldo: {ms.URL_EJECUTABLE_CLOUDFLARED}",
+            bg=tema.BEIGE,
+            fg=tema.VERDE,
+            font=(tema.FUENTE, 8, "underline"),
+            cursor="hand2",
+        )
+        lbl_link_cf.pack(anchor=W, pady=(2, 0))
+        lbl_link_cf.bind("<Button-1>", lambda _e: webbrowser.open(ms.URL_EJECUTABLE_CLOUDFLARED))
 
         barra_est = ttk.Frame(est, style="Tarjeta.TFrame")
         barra_est.pack(fill=X, pady=(10, 0))
@@ -247,7 +271,7 @@ class Vista(ttk.Frame):
             foreground=tema.VERDE if est["remote_url"] else tema.DORADO,
         )
         self.lbl_url_remota.configure(
-            text=est["remote_url"] or f"Redirigiendo sin app a: {ms.URL_DESCARGA_APP}",
+            text=est["remote_url"] or "No activo (descarga Cloudflare para conexión fuera del Wi-Fi)",
             foreground=tema.VERDE_OSCURO if est["remote_url"] else tema.GRIS,
         )
         self.lbl_url_local.configure(text=est["local_url"])

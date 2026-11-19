@@ -3,6 +3,8 @@
 Se ejecuta en cada arranque: si las tablas ya existen no hace nada,
 si es la primera vez crea todo y carga los datos iniciales.
 """
+import json
+
 from database.conexion import transaccion
 
 ESQUEMA = """
@@ -74,6 +76,30 @@ CREATE TABLE IF NOT EXISTS movimientos_inventario (
     referencia    TEXT,
     id_usuario    INTEGER NOT NULL REFERENCES usuarios(id_usuario),
     fecha         TEXT DEFAULT (datetime('now','localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS inventory_movements (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id     INTEGER NOT NULL REFERENCES productos(id_producto),
+    movement_type  TEXT NOT NULL CHECK (movement_type IN ('ENTRADA', 'SALIDA_MERMA', 'AJUSTE_CONTEO', 'VENTA', 'DEVOLUCION')),
+    quantity       INTEGER NOT NULL CHECK (quantity > 0),
+    previous_stock INTEGER NOT NULL,
+    new_stock      INTEGER NOT NULL,
+    reason         TEXT DEFAULT '',
+    user_id        INTEGER NOT NULL REFERENCES usuarios(id_usuario),
+    created_at     TEXT DEFAULT (datetime('now','localtime')),
+    synced         INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS sync_queue (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    table_name  TEXT NOT NULL,
+    record_id   INTEGER NOT NULL,
+    operation   TEXT NOT NULL DEFAULT 'INSERT',
+    payload     TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'SYNCED', 'FAILED')),
+    created_at  TEXT DEFAULT (datetime('now','localtime')),
+    synced_at   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS facturas (
@@ -152,9 +178,37 @@ CREATE TABLE IF NOT EXISTS licencia_sistema (
 CREATE INDEX IF NOT EXISTS idx_facturas_fecha ON facturas(fecha);
 CREATE INDEX IF NOT EXISTS idx_detalles_factura ON detalles_factura(id_factura);
 CREATE INDEX IF NOT EXISTS idx_mov_producto ON movimientos_inventario(id_producto);
+CREATE INDEX IF NOT EXISTS idx_inv_mov_product ON inventory_movements(product_id);
+CREATE INDEX IF NOT EXISTS idx_inv_mov_created ON inventory_movements(created_at);
+CREATE INDEX IF NOT EXISTS idx_inv_mov_created_desc ON inventory_movements(created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_inv_mov_type ON inventory_movements(movement_type);
+CREATE INDEX IF NOT EXISTS idx_productos_activo_stock ON productos(activo, stock, stock_minimo);
+CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status);
 CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON gastos(fecha);
 
 INSERT OR IGNORE INTO roles (id_rol, nombre) VALUES (1, 'administrador'), (2, 'cajero');
+"""
+
+# Esquema equivalente en PostgreSQL (Neon.tech) para sincronización de Kardex
+ESQUEMA_POSTGRES_NEON = """
+CREATE TABLE IF NOT EXISTS inventory_movements (
+    id             BIGSERIAL PRIMARY KEY,
+    empresa_nit    TEXT,
+    local_id       INTEGER,
+    product_id     INTEGER NOT NULL,
+    sku            TEXT,
+    movement_type  TEXT NOT NULL CHECK (movement_type IN ('ENTRADA', 'SALIDA_MERMA', 'AJUSTE_CONTEO', 'VENTA', 'DEVOLUCION')),
+    quantity       INTEGER NOT NULL CHECK (quantity > 0),
+    previous_stock INTEGER NOT NULL,
+    new_stock      INTEGER NOT NULL,
+    reason         TEXT DEFAULT '',
+    user_id        INTEGER NOT NULL,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_pg_inv_mov_product ON inventory_movements(product_id);
+CREATE INDEX IF NOT EXISTS idx_pg_inv_mov_created ON inventory_movements(created_at);
+CREATE INDEX IF NOT EXISTS idx_pg_inv_mov_type ON inventory_movements(movement_type);
 """
 
 # Categorías iniciales según el régimen de IVA colombiano.
@@ -217,6 +271,76 @@ def inicializar_base_datos():
         ):
             if nombre_col not in cols_gastos:
                 con.execute(col_sql)
+
+        # Migración automática de columnas en inventory_movements (por compatibilidad)
+        cols_inv = {
+            r[1] for r in con.execute("PRAGMA table_info(inventory_movements)").fetchall()
+        }
+        if "synced" not in cols_inv:
+            con.execute("ALTER TABLE inventory_movements ADD COLUMN synced INTEGER NOT NULL DEFAULT 0")
+
+        # Migración segura de movimientos históricos desde movimientos_inventario hacia inventory_movements (Kardex)
+        if con.execute("SELECT COUNT(*) FROM inventory_movements").fetchone()[0] == 0:
+            antiguos = con.execute(
+                """SELECT m.id_movimiento, m.id_producto, m.tipo, m.cantidad, m.stock_final,
+                          COALESCE(m.referencia, '') AS referencia, m.id_usuario, m.fecha,
+                          COALESCE(p.codigo, '') AS sku
+                   FROM movimientos_inventario m
+                   LEFT JOIN productos p ON p.id_producto = m.id_producto
+                   ORDER BY m.id_movimiento ASC"""
+            ).fetchall()
+            cola_vacia = con.execute("SELECT COUNT(*) FROM sync_queue").fetchone()[0] == 0
+            for ant in antiguos:
+                tipo_raw = (ant["tipo"] or "").strip().upper()
+                if tipo_raw == "ANULACION":
+                    m_type = "DEVOLUCION"
+                elif tipo_raw in ("ENTRADA", "SALIDA_MERMA", "AJUSTE_CONTEO", "VENTA", "DEVOLUCION"):
+                    m_type = tipo_raw
+                else:
+                    m_type = "AJUSTE_CONTEO"
+                cant_raw = int(ant["cantidad"] or 0)
+                qty = max(1, abs(cant_raw))
+                new_stock = int(ant["stock_final"] or 0)
+                prev_stock = max(0, new_stock - cant_raw)
+                reason = ant["referencia"] or ""
+                created_at = ant["fecha"]
+                cur = con.execute(
+                    """INSERT INTO inventory_movements
+                       (product_id, movement_type, quantity, previous_stock, new_stock, reason, user_id, created_at, synced)
+                       VALUES (?,?,?,?,?,?,?,?,0)""",
+                    (
+                        ant["id_producto"],
+                        m_type,
+                        qty,
+                        prev_stock,
+                        new_stock,
+                        reason,
+                        ant["id_usuario"],
+                        created_at,
+                    ),
+                )
+                mov_id = cur.lastrowid
+                if cola_vacia:
+                    payload = json.dumps(
+                        {
+                            "movement_id": mov_id,
+                            "product_id": ant["id_producto"],
+                            "sku": ant["sku"],
+                            "movement_type": m_type,
+                            "quantity": qty,
+                            "previous_stock": prev_stock,
+                            "new_stock": new_stock,
+                            "reason": reason,
+                            "user_id": ant["id_usuario"],
+                            "created_at": created_at,
+                        },
+                        ensure_ascii=False,
+                    )
+                    con.execute(
+                        """INSERT INTO sync_queue (table_name, record_id, operation, payload, status, created_at)
+                           VALUES ('inventory_movements', ?, 'INSERT', ?, 'PENDING', ?)""",
+                        (mov_id, payload, created_at),
+                    )
 
         if con.execute("SELECT COUNT(*) FROM categorias").fetchone()[0] == 0:
             con.executemany(

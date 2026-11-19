@@ -5,7 +5,7 @@ import tkinter as tk
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
-from logica import auth_logic, licencia
+from logica import auth_logic, licencia, productos_logic as pl
 from logica.empresa_logic import obtener_empresa
 from logica.seguridad import ROL_ADMIN, ROL_CAJERO, Sesion
 from ui import componentes as cmp
@@ -31,18 +31,18 @@ def _cargar_vista(nombre: str):
     return modulo.Vista
 
 
-# (clave, texto del menú, módulo, roles permitidos)
+# (clave, texto del menú con icono limpio, módulo, roles permitidos)
 SECCIONES = [
-    ("dashboard", "Dashboard", "dashboard", (ROL_ADMIN,)),
-    ("facturacion", "Facturación", "facturacion", (ROL_CAJERO,)),
-    ("facturas", "Facturas emitidas", "facturas", (ROL_ADMIN, ROL_CAJERO)),
-    ("productos", "Productos", "productos", (ROL_ADMIN,)),
-    ("inventario", "Inventario", "inventario", (ROL_ADMIN, ROL_CAJERO)),
-    ("contabilidad", "Contabilidad", "contabilidad", (ROL_ADMIN,)),
-    ("reportes", "Reportes", "reportes", (ROL_ADMIN,)),
-    ("usuarios", "Usuarios", "usuarios", (ROL_ADMIN,)),
-    ("auditoria_movil", "Auditoría Móvil (QR)", "auditoria_movil", (ROL_ADMIN,)),
-    ("configuracion", "Configuración", "configuracion", (ROL_ADMIN,)),
+    ("dashboard", "📊  Dashboard", "dashboard", (ROL_ADMIN,)),
+    ("facturacion", "🧾  Facturación", "facturacion", (ROL_CAJERO,)),
+    ("facturas", "📄  Facturas emitidas", "facturas", (ROL_ADMIN, ROL_CAJERO)),
+    ("productos", "📦  Productos", "productos", (ROL_ADMIN,)),
+    ("inventario", "📋  Inventario", "inventario", (ROL_ADMIN, ROL_CAJERO)),
+    ("contabilidad", "💼  Contabilidad", "contabilidad", (ROL_ADMIN,)),
+    ("reportes", "📈  Reportes", "reportes", (ROL_ADMIN,)),
+    ("usuarios", "👥  Usuarios", "usuarios", (ROL_ADMIN,)),
+    ("auditoria_movil", "📱  Auditoría Móvil (QR)", "auditoria_movil", (ROL_ADMIN,)),
+    ("configuracion", "⚙️  Configuración", "configuracion", (ROL_ADMIN,)),
 ]
 
 
@@ -56,12 +56,13 @@ class Principal(ttk.Frame):
         self.botones = {}
         self._tooltips = []
         self.vista_actual = None
+        self._sync_timer_id = None
 
-        lateral = ttk.Frame(self, style="Lateral.TFrame", width=240)
+        lateral = ttk.Frame(self, style="Lateral.TFrame", width=268)
         lateral.pack(side=LEFT, fill=Y)
         lateral.pack_propagate(False)
 
-        logo = ttk.Frame(lateral, style="Lateral.TFrame", padding=(22, 24, 22, 4))
+        logo = ttk.Frame(lateral, style="Lateral.TFrame", padding=(22, 22, 22, 4))
         logo.pack(fill=X)
         ttk.Label(logo, text="Bill ", style="Logo.TLabel").pack(side=LEFT)
         ttk.Label(logo, text="Zen", style="LogoZen.TLabel").pack(side=LEFT)
@@ -70,27 +71,32 @@ class Principal(ttk.Frame):
             lateral,
             text=emp.get("razon_social", ""),
             style="Lateral.TLabel",
-            wraplength=200,
-            font=(tema.FUENTE, 9),
-        ).pack(anchor=W, padx=24, pady=(0, 4))
+            wraplength=224,
+            font=(tema.FUENTE, 10),
+        ).pack(anchor=W, padx=22, pady=(0, 10))
 
-        fila_plan = ttk.Frame(lateral, style="Lateral.TFrame", padding=(24, 0, 18, 12))
+        # Badge mejorado del plan activo con borde dorado sutil
+        borde_plan = tk.Frame(lateral, bg=tema.DORADO, padx=1, pady=1)
+        borde_plan.pack(fill=X, padx=20, pady=(0, 14))
+        fila_plan = tk.Frame(borde_plan, bg=tema.VERDE_PROFUNDO, padx=10, pady=8)
         fila_plan.pack(fill=X)
-        self.lbl_plan = ttk.Label(
+
+        self.lbl_plan = tk.Label(
             fila_plan,
-            text=f"PLAN {licencia.etiqueta_corta_plan(self.plan_actual)}",
-            style="Lateral.TLabel",
-            foreground=tema.DORADO_CLARO,
-            font=(tema.FUENTE, 8, "bold"),
+            text=f"★ PLAN {licencia.etiqueta_corta_plan(self.plan_actual)}",
+            bg=tema.VERDE_PROFUNDO,
+            fg=tema.DORADO_CLARO,
+            font=(tema.FUENTE, 9, "bold"),
+            anchor="w",
         )
         self.lbl_plan.pack(side=LEFT)
 
         btn_sync = tk.Label(
             fila_plan,
-            text="Actualizar",
-            bg=tema.VERDE_OSCURO,
+            text="↻ Actualizar",
+            bg=tema.VERDE_PROFUNDO,
             fg=tema.BEIGE,
-            font=(tema.FUENTE, 8, "underline"),
+            font=(tema.FUENTE, 9, "underline"),
             cursor="hand2",
         )
         btn_sync.pack(side=RIGHT)
@@ -104,38 +110,67 @@ class Principal(ttk.Frame):
         self.marco_menu.pack(fill=X)
         self._construir_menu_lateral()
 
-        pie = ttk.Frame(lateral, style="Lateral.TFrame", padding=18)
+        pie = ttk.Frame(lateral, style="Lateral.TFrame", padding=20)
         pie.pack(side=BOTTOM, fill=X)
         ttk.Label(
             pie,
             text=self.usuario["nombre_completo"],
             style="Lateral.TLabel",
-            font=(tema.FUENTE, 10, "bold"),
-            wraplength=200,
+            font=(tema.FUENTE, 11, "bold"),
+            wraplength=224,
         ).pack(anchor=W)
         ttk.Label(
             pie,
             text=self.usuario["rol"].capitalize(),
             style="Lateral.TLabel",
             foreground=tema.DORADO_CLARO,
-            font=(tema.FUENTE, 9),
+            font=(tema.FUENTE, 10),
         ).pack(anchor=W, pady=(0, 10))
         ttk.Button(pie, text="Cerrar sesión", style="Oro.TButton", command=self.cerrar_sesion).pack(fill=X)
 
-        self.area = ttk.Frame(self, padding=(28, 22))
-        self.area.pack(side=LEFT, fill=BOTH, expand=YES)
+        # Área principal con barra superior de estado de red/sincronización y contenedor de vistas
+        contenedor_derecho = ttk.Frame(self, padding=(26, 16, 26, 20))
+        contenedor_derecho.pack(side=LEFT, fill=BOTH, expand=YES)
+
+        barra_estado = ttk.Frame(contenedor_derecho)
+        barra_estado.pack(fill=X, pady=(0, 6))
+
+        self.pildora_sync_borde = tk.Frame(barra_estado, bg=tema.SYNC_AMBAR_BORDE, padx=1, pady=1)
+        self.pildora_sync_borde.pack(side=RIGHT)
+        self.lbl_estado_sync = tk.Label(
+            self.pildora_sync_borde,
+            text="● Modo Offline (SQLite)",
+            bg=tema.SYNC_AMBAR_BG,
+            fg=tema.SYNC_AMBAR_FG,
+            font=(tema.FUENTE, 10, "bold"),
+            padx=12,
+            pady=4,
+            cursor="hand2",
+        )
+        self.lbl_estado_sync.pack()
+        self.lbl_estado_sync.bind("<Button-1>", lambda _e: self.disparar_sync_ahora())
+        cmp.vincular_tooltip(
+            self.lbl_estado_sync,
+            "Estado del motor de sincronización SQLite local-first ↔ Nube (Neon.tech). Haz clic para comprobar/sincronizar en segundo plano.",
+        )
+
+        self.area = ttk.Frame(contenedor_derecho)
+        self.area.pack(fill=BOTH, expand=YES)
 
         self.seccion_activa = "dashboard" if self.usuario["id_rol"] == ROL_ADMIN else "facturacion"
         self.ir_a(self.seccion_activa)
 
-        # Sincronizar silenciosamente con la nube al iniciar sesión por si el usuario mejoró su plan en la web
+        # Sincronizar plan y estado de cola en segundo plano sin congelar la UI
         threading.Thread(target=self._sincronizar_plan_bg, daemon=True).start()
+        self.actualizar_indicador_sync()
+        self.disparar_sync_ahora()
+        self._programar_refresco_sync()
 
     def _construir_menu_lateral(self):
         for w in self.marco_menu.winfo_children():
             w.destroy()
         self.botones.clear()
-        self.lbl_plan.configure(text=f"PLAN {licencia.etiqueta_corta_plan(self.plan_actual)}")
+        self.lbl_plan.configure(text=f"★ PLAN {licencia.etiqueta_corta_plan(self.plan_actual)}")
 
         for clave, texto, modulo, roles in SECCIONES:
             if self.usuario["id_rol"] in roles:
@@ -153,7 +188,7 @@ class Principal(ttk.Frame):
                     plan_req = licencia.plan_requerido_para(clave)
                     b = ttk.Button(
                         self.marco_menu,
-                        text=f"{texto} (Plan {plan_req})",
+                        text=f"🔒  {texto.split('  ', 1)[-1]} ({plan_req})",
                         style="Menu.TButton",
                         state="disabled",
                     )
@@ -164,6 +199,38 @@ class Principal(ttk.Frame):
                         f"Tu plan actual es {licencia.nombre_legible_plan(self.plan_actual)}. "
                         "Actualiza en bill-zen-users.vercel.app para desbloquearlo.",
                     )
+
+    def actualizar_indicador_sync(self, estado: dict | None = None):
+        """Actualiza la píldora visual de estado de red/sincronización en la esquina superior derecha."""
+        if not self.winfo_exists():
+            return
+        est = estado or pl.obtener_estado_sincronizacion()
+        modo = est.get("modo", "offline")
+        if modo == "cloud":
+            bg, fg, borde = tema.SYNC_VERDE_BG, tema.SYNC_VERDE_FG, tema.SYNC_VERDE_BORDE
+        else:
+            bg, fg, borde = tema.SYNC_AMBAR_BG, tema.SYNC_AMBAR_FG, tema.SYNC_AMBAR_BORDE
+        self.pildora_sync_borde.configure(bg=borde)
+        self.lbl_estado_sync.configure(text=est.get("etiqueta", "● Modo Offline (SQLite)"), bg=bg, fg=fg)
+
+    def disparar_sync_ahora(self):
+        """Lanza una comprobación/sincronización asíncrona en segundo plano y refresca la píldora en el hilo UI."""
+        self.actualizar_indicador_sync()
+
+        def _al_terminar(est):
+            try:
+                if self.winfo_exists():
+                    self.after(0, lambda e=est: self.actualizar_indicador_sync(e))
+            except Exception:
+                pass
+
+        pl.disparar_sincronizacion_bg(callback_ui=_al_terminar)
+
+    def _programar_refresco_sync(self):
+        if not self.winfo_exists():
+            return
+        self.actualizar_indicador_sync()
+        self._sync_timer_id = self.after(15000, self._programar_refresco_sync)
 
     def _sincronizar_plan_bg(self):
         res = licencia.sincronizar_plan_con_nube(timeout_seg=3.0)
@@ -219,6 +286,12 @@ class Principal(ttk.Frame):
         self.vista_actual.pack(fill=BOTH, expand=YES)
 
     def cerrar_sesion(self):
+        if self._sync_timer_id is not None:
+            try:
+                self.after_cancel(self._sync_timer_id)
+            except Exception:
+                pass
+            self._sync_timer_id = None
         from ui.vistas.facturacion import limpiar_borrador_facturacion
         limpiar_borrador_facturacion()
         Sesion.cerrar()
@@ -227,3 +300,12 @@ class Principal(ttk.Frame):
         if padre:
             padre.update_idletasks()
         self.al_cerrar_sesion()
+
+    def destroy(self):
+        if getattr(self, "_sync_timer_id", None) is not None:
+            try:
+                self.after_cancel(self._sync_timer_id)
+            except Exception:
+                pass
+            self._sync_timer_id = None
+        super().destroy()

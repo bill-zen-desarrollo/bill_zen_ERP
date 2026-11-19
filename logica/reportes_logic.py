@@ -203,28 +203,37 @@ def estado_resultados(desde, hasta):
     res_estados = consultar_uno(
         """SELECT COALESCE(SUM(CASE WHEN COALESCE(estado,'PAGADO')='PAGADO' THEN valor ELSE 0 END), 0) AS gastos_pagados,
                   COALESCE(SUM(CASE WHEN COALESCE(estado,'PAGADO')='PENDIENTE' THEN valor ELSE 0 END), 0) AS gastos_pendientes,
-                  COALESCE(SUM(CASE WHEN COALESCE(estado,'PAGADO')='PENDIENTE' THEN 1 ELSE 0 END), 0) AS conteo_pendientes
+                  COALESCE(SUM(CASE WHEN COALESCE(estado,'PAGADO')='PENDIENTE' THEN 1 ELSE 0 END), 0) AS conteo_pendientes,
+                  COALESCE(SUM(CASE WHEN COALESCE(estado,'PAGADO')='PAGADO' AND concepto NOT LIKE 'Ingreso de stock:%' THEN valor ELSE 0 END), 0) AS gastos_op_pagados,
+                  COALESCE(SUM(CASE WHEN COALESCE(estado,'PAGADO')='PENDIENTE' AND concepto NOT LIKE 'Ingreso de stock:%' THEN valor ELSE 0 END), 0) AS gastos_op_pendientes,
+                  COALESCE(SUM(CASE WHEN concepto LIKE 'Ingreso de stock:%' THEN valor ELSE 0 END), 0) AS compras_stock
            FROM gastos
            WHERE (fecha BETWEEN ? AND ? OR COALESCE(estado,'PAGADO')='PENDIENTE')""",
         (desde, hasta),
     )
 
     gastos = sum(x["total"] for x in g)
+    gastos_op_pagados = float(res_estados["gastos_op_pagados"] or 0)
+    gastos_op_pendientes = float(res_estados["gastos_op_pendientes"] or 0)
+    gastos_operativos = gastos_op_pagados + gastos_op_pendientes
+    compras_stock = float(res_estados["compras_stock"] or 0)
+
     ventas_netas = float(v["ventas_netas"] or 0)
     costo_ventas = float(c["costo"] or 0)
     utilidad_bruta = ventas_netas - costo_ventas
-    utilidad_neta = utilidad_bruta - gastos
+    # No descontar dos veces las compras de stock que ya entran en el Costo de Mercancía Vendida (CMV)
+    utilidad_neta = utilidad_bruta - gastos_operativos
 
     margen_bruto_pct = (utilidad_bruta / ventas_netas * 100) if ventas_netas > 0 else 0.0
     margen_neto_pct = (utilidad_neta / ventas_netas * 100) if ventas_netas > 0 else 0.0
 
     # Punto de equilibrio: cuánto necesita vender (sin IVA) para cubrir sus gastos operativos con su margen actual
     if margen_bruto_pct > 0:
-        punto_equilibrio = gastos / (margen_bruto_pct / 100.0)
+        punto_equilibrio = gastos_operativos / (margen_bruto_pct / 100.0)
     else:
-        punto_equilibrio = gastos
+        punto_equilibrio = gastos_operativos
     cobertura_equilibrio_pct = (
-        (ventas_netas / punto_equilibrio * 100.0) if punto_equilibrio > 0 else (100.0 if gastos == 0 else 0.0)
+        (ventas_netas / punto_equilibrio * 100.0) if punto_equilibrio > 0 else (100.0 if gastos_operativos == 0 else 0.0)
     )
 
     for item in g:
@@ -239,6 +248,10 @@ def estado_resultados(desde, hasta):
         "gastos_pagados": float(res_estados["gastos_pagados"] or 0),
         "gastos_pendientes": float(res_estados["gastos_pendientes"] or 0),
         "conteo_pendientes": int(res_estados["conteo_pendientes"] or 0),
+        "gastos_operativos": gastos_operativos,
+        "gastos_op_pagados": gastos_op_pagados,
+        "gastos_op_pendientes": gastos_op_pendientes,
+        "compras_stock": compras_stock,
         "gastos_por_categoria": g,
         "utilidad_neta": utilidad_neta,
         "margen_neto_pct": margen_neto_pct,

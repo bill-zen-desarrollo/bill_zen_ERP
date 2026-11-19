@@ -274,54 +274,76 @@ def verificar_licencia_local() -> dict:
     }
 
 
-def _sincronizar_empresa_y_admin_local(datos_nube: dict, password_plana: str):
-    """Sincroniza automáticamente en el SQLite local la empresa y el usuario administrador
-    provenientes de Neon.tech para que el cliente pueda iniciar sesión en el ERP con sus mismas credenciales."""
-    nit = str(datos_nube.get("nit") or "").strip()
-    razon_social = str(datos_nube.get("razon_social") or "").strip()
-    email = str(datos_nube.get("email") or "").strip()
-    nombres = str(datos_nube.get("nombres_admin") or "Administrador").strip()
-    apellidos = str(datos_nube.get("apellidos_admin") or "").strip()
-    nombre_completo = f"{nombres} {apellidos}".strip() or razon_social or "Administrador"
+def _sincronizar_empresa_local(datos_nube: dict, identificador_fallback: str = ""):
+    """Escribe automáticamente en la tabla `empresa` del SQLite local los datos de la empresa
+    registrados por el usuario en la página web `bill_zen_users` (Neon.tech)."""
+    emp_nube = datos_nube.get("empresa") if isinstance(datos_nube.get("empresa"), dict) else {}
 
-    if not nit and not email:
-        return
+    nit = str(
+        datos_nube.get("nit")
+        or emp_nube.get("nit")
+        or ""
+    ).strip()
+    razon_social = str(
+        datos_nube.get("razon_social")
+        or datos_nube.get("nombre_empresa")
+        or emp_nube.get("razon_social")
+        or emp_nube.get("nombre_empresa")
+        or ""
+    ).strip()
+    email = str(
+        datos_nube.get("email")
+        or datos_nube.get("correo")
+        or emp_nube.get("email")
+        or emp_nube.get("correo")
+        or ""
+    ).strip()
+    direccion = str(
+        datos_nube.get("direccion")
+        or emp_nube.get("direccion")
+        or ""
+    ).strip()
+    telefono = str(
+        datos_nube.get("telefono")
+        or emp_nube.get("telefono")
+        or ""
+    ).strip()
+
+    # Si el usuario ingresó con correo o NIT y la respuesta omitió alguno, usar respaldo seguro al crear
+    id_limpio = (identificador_fallback or "").strip()
+    if not email and "@" in id_limpio:
+        email = id_limpio.lower()
+    if not nit and id_limpio and "@" not in id_limpio:
+        nit = id_limpio
+
+    nombres = str(datos_nube.get("nombres_admin") or "").strip()
+    apellidos = str(datos_nube.get("apellidos_admin") or "").strip()
+    razon_fallback = (
+        razon_social
+        or f"{nombres} {apellidos}".strip()
+        or (email.split("@")[0] if email else "Mi Empresa Bill Zen")
+    )
+    nit_fallback = nit or "000000000-0"
 
     with transaccion() as con:
-        if nit and razon_social:
-            emp_existente = con.execute("SELECT id_empresa FROM empresa WHERE id_empresa = 1").fetchone()
-            if not emp_existente:
-                con.execute(
-                    """INSERT INTO empresa (id_empresa, nit, razon_social, correo, regimen, prefijo_factura)
-                       VALUES (1, ?, ?, ?, 'Responsable de IVA', 'FV')""",
-                    (nit, razon_social, email),
-                )
-            else:
-                con.execute(
-                    "UPDATE empresa SET nit = ?, razon_social = ?, correo = COALESCE(NULLIF(correo, ''), ?) WHERE id_empresa = 1",
-                    (nit, razon_social, email),
-                )
-
-        if password_plana:
-            pwd_hash_local = hash_password(password_plana)
-            admin_fila = con.execute(
-                "SELECT id_usuario, username FROM usuarios WHERE id_rol = ? ORDER BY id_usuario LIMIT 1",
-                (ROL_ADMIN,),
-            ).fetchone()
-            username_preferido = email or nit or "admin"
-            if not admin_fila:
-                con.execute(
-                    """INSERT INTO usuarios (username, nombre_completo, password_hash, id_rol, activo)
-                       VALUES (?, ?, ?, ?, 1)""",
-                    (username_preferido, nombre_completo, pwd_hash_local, ROL_ADMIN),
-                )
-            else:
-                con.execute(
-                    """UPDATE usuarios
-                       SET password_hash = ?, activo = 1, intentos_fallidos = 0, bloqueado_hasta = NULL
-                       WHERE id_usuario = ?""",
-                    (pwd_hash_local, admin_fila["id_usuario"]),
-                )
+        emp_existente = con.execute("SELECT id_empresa FROM empresa WHERE id_empresa = 1").fetchone()
+        if not emp_existente:
+            con.execute(
+                """INSERT INTO empresa (id_empresa, nit, razon_social, direccion, telefono, correo, regimen, prefijo_factura)
+                   VALUES (1, ?, ?, ?, ?, ?, 'Responsable de IVA', 'FV')""",
+                (nit_fallback, razon_fallback, direccion, telefono, email),
+            )
+        else:
+            con.execute(
+                """UPDATE empresa
+                   SET nit = COALESCE(NULLIF(?, ''), nit),
+                       razon_social = COALESCE(NULLIF(?, ''), razon_social),
+                       direccion = COALESCE(NULLIF(?, ''), direccion),
+                       telefono = COALESCE(NULLIF(?, ''), telefono),
+                       correo = COALESCE(NULLIF(?, ''), correo)
+                   WHERE id_empresa = 1""",
+                (nit, razon_social, direccion, telefono, email),
+            )
 
 
 def _post_api_licencia(url: str, cuerpo: bytes) -> dict:
@@ -340,19 +362,20 @@ def _post_api_licencia(url: str, cuerpo: bytes) -> dict:
         return json.loads(raw) if raw else {}
 
 
-def activar_licencia_online(email: str, password: str, hw_id: str | None = None) -> dict:
-    """Envía `POST /api/licencia/activar` con `(email/nit, password, hardware_id)` a la API de `bill_zen_users`.
+def activar_licencia_online(nit: str, password: str, hw_id: str | None = None) -> dict:
+    """Envía `POST /api/licencia/activar` con `(nit, password, hardware_id)` a la API de `bill_zen_users`.
     El `.exe` jamás almacena credenciales de la base de datos en la nube (Neon.tech); toda validación
     ocurre en el backend."""
-    identificador = (email or "").strip()
+    identificador = (nit or "").strip()
     if not identificador:
-        raise ErrorValidacion("Ingresa el correo electrónico o NIT registrado en Bill Zen.")
+        raise ErrorValidacion("Ingresa el NIT registrado en Bill Zen.")
+    if "@" in identificador:
+        raise ErrorValidacion("Ingresa únicamente el NIT de tu empresa (no el correo electrónico).")
     if not password:
         raise ErrorValidacion("Ingresa la contraseña de tu cuenta web.")
 
     hw_actual = hw_id or generar_hardware_id()
     cuerpo = json.dumps({
-        "email": identificador,
         "nit": identificador,
         "password": password,
         "hardware_id": hw_actual,
@@ -423,7 +446,7 @@ def activar_licencia_online(email: str, password: str, hw_id: str | None = None)
         or PLAN_BASICO
     )
     email_guardar = str(datos.get("email") or identificador).strip().lower()
-    _sincronizar_empresa_y_admin_local(datos, password)
+    _sincronizar_empresa_local(datos, identificador)
     return guardar_licencia_local(email_guardar, hw_actual, plan_recibido)
 
 
@@ -470,6 +493,11 @@ def sincronizar_plan_con_nube(timeout_seg: float = 2.5) -> dict:
             )
             with urllib.request.urlopen(req, timeout=timeout_seg) as resp:
                 datos = json.loads(resp.read().decode("utf-8"))
+            if datos.get("nit") or datos.get("razon_social"):
+                try:
+                    _sincronizar_empresa_local(datos, email_guardado or nit_emp)
+                except Exception:
+                    pass
             plan_nube = datos.get("plan_adquirido") or datos.get("plan")
             if plan_nube:
                 plan_norm = _normalizar_plan(plan_nube)

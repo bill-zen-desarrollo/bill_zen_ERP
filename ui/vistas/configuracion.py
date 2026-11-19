@@ -24,48 +24,51 @@ class Vista(ttk.Frame):
         cmp.encabezado(self, "Configuración", "Datos de la empresa, seguridad y copias de seguridad").pack(anchor=W, pady=(0, 12))
         cols = ttk.Frame(self)
         cols.pack(fill=BOTH, expand=YES)
+        for i in range(3 if Sesion.es_admin() else 2):
+            cols.columnconfigure(i, weight=1, uniform="cfg")
+        cols.rowconfigure(0, weight=1)
 
         b1 = cmp.tarjeta(cols, padding=20)
-        b1.pack(side=LEFT, fill=Y, padx=(0, 14))
+        b1.grid(row=0, column=0, sticky=NSEW, padx=(0, 12))
         c = b1.interior
-        ttk.Label(c, text="Datos de la empresa", style="TarjetaTitulo.TLabel").pack(anchor=W)
+        ttk.Label(c, text="Datos de la empresa", style="TarjetaTitulo.TLabel").pack(anchor=W, pady=(0, 4))
         emp = el.obtener_empresa()
         self.campos = {}
         for clave, etiqueta in (("nit", "NIT"), ("razon_social", "Razón social"), ("direccion", "Dirección"), ("telefono", "Teléfono"),
                                 ("correo", "Correo"), ("regimen", "Régimen"), ("prefijo_factura", "Prefijo de factura")):
-            e = cmp.campo(c, etiqueta, ancho=30)
+            e = cmp.campo(c, etiqueta, ancho=26)
             e.insert(0, emp.get(clave) or "")
             self.campos[clave] = e
-        ttk.Button(c, text="Guardar cambios", style="Zen.TButton", command=self.guardar_empresa).pack(fill=X, pady=(16, 0))
+        ttk.Button(c, text="Guardar cambios", style="Zen.TButton", command=self.guardar_empresa, padding=(12, 9)).pack(fill=X, pady=(10, 0))
 
         der = ttk.Frame(cols)
-        der.pack(side=LEFT, fill=Y, padx=(0, 14))
+        der.grid(row=0, column=1, sticky=NSEW, padx=(0, 12 if Sesion.es_admin() else 0))
         b2 = cmp.tarjeta(der, padding=20)
         b2.pack(fill=X)
         c2 = b2.interior
-        ttk.Label(c2, text="Cambiar mi contraseña", style="TarjetaTitulo.TLabel").pack(anchor=W)
-        self.p_actual = cmp.campo(c2, "Contraseña actual", ancho=28, show="●")
-        self.p_nueva = cmp.campo(c2, "Nueva contraseña", ancho=28, show="●")
-        self.p_conf = cmp.campo(c2, "Confirmar nueva contraseña", ancho=28, show="●")
-        ttk.Button(c2, text="Actualizar contraseña", style="Oro.TButton", command=self.cambiar_pass).pack(fill=X, pady=(14, 0))
+        ttk.Label(c2, text="Cambiar mi contraseña", style="TarjetaTitulo.TLabel").pack(anchor=W, pady=(0, 4))
+        self.p_actual = cmp.campo(c2, "Contraseña actual", ancho=26, show="●")
+        self.p_nueva = cmp.campo(c2, "Nueva contraseña", ancho=26, show="●")
+        self.p_conf = cmp.campo(c2, "Confirmar nueva contraseña", ancho=26, show="●")
+        ttk.Button(c2, text="Actualizar contraseña", style="Oro.TButton", command=self.cambiar_pass, padding=(12, 9)).pack(fill=X, pady=(10, 0))
 
         b3 = cmp.tarjeta(der, padding=20)
-        b3.pack(fill=X, pady=(14, 0))
+        b3.pack(fill=BOTH, expand=YES, pady=(12, 0))
         c3 = b3.interior
         ttk.Label(c3, text="Copia de seguridad", style="TarjetaTitulo.TLabel").pack(anchor=W)
         ttk.Label(c3, text="Guarda una copia de toda tu información en la ubicación que elijas (USB, nube, etc.).",
-                  style="Tarjeta.TLabel", foreground=tema.GRIS, wraplength=280).pack(anchor=W, pady=6)
-        ttk.Button(c3, text="Crear copia de seguridad", style="Zen.TButton", command=self.respaldo).pack(fill=X)
+                  style="Tarjeta.TLabel", foreground=tema.GRIS, wraplength=280, font=(tema.FUENTE, 10)).pack(anchor=W, pady=6)
+        ttk.Button(c3, text="Crear copia de seguridad", style="Zen.TButton", command=self.respaldo, padding=(12, 9)).pack(fill=X)
         ttk.Label(c3, text=f"Además, al cerrar el programa se guarda una copia automática semanal (se conservan las últimas {respaldo_auto.MAX_COPIAS} semanas).",
-                  style="Tarjeta.TLabel", foreground=tema.VERDE_CLARO, wraplength=280, font=(tema.FUENTE, 9, "italic")).pack(anchor=W, pady=(10, 4))
+                  style="Tarjeta.TLabel", foreground=tema.VERDE_CLARO, wraplength=280, font=(tema.FUENTE, 9, "italic")).pack(anchor=W, pady=(8, 4))
         ttk.Button(c3, text="Abrir carpeta de copias automáticas", style="Suave.TButton",
-                   command=lambda: os.startfile(respaldo_auto.carpeta_respaldos())).pack(fill=X)
+                   command=lambda: os.startfile(respaldo_auto.carpeta_respaldos()), padding=(12, 8)).pack(fill=X)
         ttk.Label(c3, text=f"Base de datos: {ruta_db()}", style="Tarjeta.TLabel", foreground=tema.GRIS,
-                  wraplength=280, font=(tema.FUENTE, 8)).pack(anchor=W, pady=(8, 0))
+                  wraplength=280, font=(tema.FUENTE, 8)).pack(anchor=W, pady=(6, 0))
 
         if Sesion.es_admin():
             b4 = cmp.tarjeta(cols, padding=20)
-            b4.pack(side=LEFT, fill=Y)
+            b4.grid(row=0, column=2, sticky=NSEW)
             c4 = b4.interior
             ttk.Label(c4, text="Preguntas de seguridad", style="TarjetaTitulo.TLabel").pack(anchor=W)
             ttk.Label(
@@ -74,25 +77,26 @@ class Vista(ttk.Frame):
                 style="Tarjeta.TLabel",
                 foreground=tema.GRIS,
                 wraplength=290,
+                font=(tema.FUENTE, 10),
             ).pack(anchor=W, pady=(4, 8))
 
             actuales = al.obtener_preguntas_admin_actual()
             preguntas = al.PREGUNTAS_PREDEFINIDAS
 
-            ttk.Label(c4, text="Pregunta 1", style="Tarjeta.TLabel", font=(tema.FUENTE, 9, "bold")).pack(anchor=W, pady=(8, 4))
-            self.cb_preg1 = ttk.Combobox(c4, values=preguntas, state="readonly", width=32)
+            ttk.Label(c4, text="Pregunta 1", style="FormLabel.TLabel").pack(anchor=W, pady=(6, 3))
+            self.cb_preg1 = ttk.Combobox(c4, values=preguntas, state="readonly", width=28, font=(tema.FUENTE, 11))
             self.cb_preg1.set(actuales[0] if len(actuales) >= 1 else preguntas[0])
             self.cb_preg1.pack(fill=X, pady=(0, 4))
-            self.e_resp1 = cmp.campo(c4, "Nueva respuesta 1", ancho=30)
+            self.e_resp1 = cmp.campo(c4, "Nueva respuesta 1", ancho=26)
 
-            ttk.Label(c4, text="Pregunta 2", style="Tarjeta.TLabel", font=(tema.FUENTE, 9, "bold")).pack(anchor=W, pady=(8, 4))
-            self.cb_preg2 = ttk.Combobox(c4, values=preguntas, state="readonly", width=32)
+            ttk.Label(c4, text="Pregunta 2", style="FormLabel.TLabel").pack(anchor=W, pady=(6, 3))
+            self.cb_preg2 = ttk.Combobox(c4, values=preguntas, state="readonly", width=28, font=(tema.FUENTE, 11))
             self.cb_preg2.set(actuales[1] if len(actuales) >= 2 else preguntas[1])
             self.cb_preg2.pack(fill=X, pady=(0, 4))
-            self.e_resp2 = cmp.campo(c4, "Nueva respuesta 2", ancho=30)
+            self.e_resp2 = cmp.campo(c4, "Nueva respuesta 2", ancho=26)
 
             ttk.Button(c4, text="Guardar preguntas", style="Zen.TButton",
-                       command=self.guardar_preguntas).pack(fill=X, pady=(14, 0))
+                       command=self.guardar_preguntas, padding=(12, 9)).pack(fill=X, pady=(10, 0))
 
     def guardar_empresa(self):
         try:

@@ -22,15 +22,19 @@ class Vista(ttk.Frame):
         hoy = date.today()
         ini_def = hoy - timedelta(days=30)
 
-        f = ttk.Frame(self)
+        card = cmp.tarjeta(self, padding=20)
+        card.pack(fill=BOTH, expand=YES)
+        cont = card.interior
+
+        f = ttk.Frame(cont, style="Tarjeta.TFrame")
         f.pack(fill=X, pady=(0, 8))
 
-        ttk.Label(f, text="Desde", style="Fondo.TLabel", font=(tema.FUENTE, 9, "bold")).pack(side=LEFT)
+        ttk.Label(f, text="Desde", style="FormLabel.TLabel").pack(side=LEFT)
         self.de_desde = ttk.DateEntry(f, dateformat="%Y-%m-%d", startdate=ini_def, width=11, bootstyle="success")
         self.de_desde.pack(side=LEFT, padx=(6, 12))
         self.e_desde = self.de_desde.entry
 
-        ttk.Label(f, text="Hasta", style="Fondo.TLabel", font=(tema.FUENTE, 9, "bold")).pack(side=LEFT)
+        ttk.Label(f, text="Hasta", style="FormLabel.TLabel").pack(side=LEFT)
         self.de_hasta = ttk.DateEntry(f, dateformat="%Y-%m-%d", startdate=hoy, width=11, bootstyle="success")
         self.de_hasta.pack(side=LEFT, padx=(6, 10))
         self.e_hasta = self.de_hasta.entry
@@ -40,7 +44,7 @@ class Vista(ttk.Frame):
         self.de_desde.bind("<<DateEntrySelected>>", lambda e: self.refrescar())
         self.de_hasta.bind("<<DateEntrySelected>>", lambda e: self.refrescar())
 
-        ttk.Button(f, text="Generar", style="Zen.TButton", command=self.refrescar, padding=(12, 6)).pack(side=LEFT, padx=(0, 10))
+        ttk.Button(f, text="Generar", style="Zen.TButton", command=self.refrescar, padding=(12, 7)).pack(side=LEFT, padx=(0, 8))
 
         # Accesos rápidos de rango de fechas para filtrar en un clic
         for etiqueta, fn in (
@@ -50,51 +54,52 @@ class Vista(ttk.Frame):
             ("Mes anterior", self._rango_mes_anterior),
             ("30 días", lambda: self._rango_dias(30)),
         ):
-            ttk.Button(f, text=etiqueta, style="Suave.TButton", command=fn, padding=(9, 6)).pack(side=LEFT, padx=2)
+            ttk.Button(f, text=etiqueta, style="Suave.TButton", command=fn, padding=(10, 7)).pack(side=LEFT, padx=2)
 
-        ttk.Button(f, text="Exportar a CSV", style="Oro.TButton", command=self.exportar).pack(side=RIGHT)
+        ttk.Button(f, text="Exportar a CSV", style="Oro.TButton", command=self.exportar, padding=(14, 7)).pack(side=RIGHT)
 
         self.lbl_rango = ttk.Label(
-            self,
+            cont,
             text="",
-            style="Subtitulo.TLabel",
-            font=(tema.FUENTE, 9),
+            style="Tarjeta.TLabel",
+            foreground=tema.GRIS,
+            font=(tema.FUENTE, 10),
         )
-        self.lbl_rango.pack(anchor=W, pady=(0, 6))
+        self.lbl_rango.pack(anchor=W, pady=(0, 8))
 
-        self.nb = ttk.Notebook(self)
+        self.nb = ttk.Notebook(cont)
         self.nb.pack(fill=BOTH, expand=YES)
         self.defs = {
             "Más vendidos": (
-                [("nombre", "Producto", 280, W), ("unidades", "Unidades", 90, E), ("total", "Total vendido", 130, E)],
+                [("nombre", "Producto", 280, W), ("unidades", "Unidades", 95, E), ("total", "Total vendido", 135, E)],
                 lambda d, h: rl.top_productos(d, h, 50),
             ),
             "Por categoría": (
-                [("nombre", "Categoría", 280, W), ("total", "Total vendido", 130, E)],
+                [("nombre", "Categoría", 280, W), ("total", "Total vendido", 135, E)],
                 rl.ventas_por_categoria,
             ),
             "Por método de pago": (
-                [("metodo_pago", "Método", 220, W), ("n", "Facturas", 90, E), ("total", "Total", 130, E)],
+                [("metodo_pago", "Método", 220, W), ("n", "Facturas", 95, E), ("total", "Total", 135, E)],
                 rl.ventas_por_metodo,
             ),
             "Por cajero": (
-                [("cajero", "Cajero", 240, W), ("n", "Facturas", 90, E), ("total", "Total", 130, E)],
+                [("cajero", "Cajero", 240, W), ("n", "Facturas", 95, E), ("total", "Total", 135, E)],
                 rl.ventas_por_cajero,
             ),
             "Por hora": (
-                [("hora", "Hora", 100, W), ("n", "Facturas", 90, E), ("total", "Total", 130, E)],
+                [("hora", "Hora", 100, W), ("n", "Facturas", 95, E), ("total", "Total", 135, E)],
                 rl.ventas_por_hora,
             ),
             "Auditoría": (
-                [("fecha", "Fecha", 150, W), ("usuario", "Usuario", 100, W), ("accion", "Acción", 170, W), ("detalle", "Detalle", 320, W)],
+                [("fecha", "Fecha", 155, W), ("usuario", "Usuario", 105, W), ("accion", "Acción", 175, W), ("detalle", "Detalle", 320, W)],
                 lambda d, h: rl.ultimas_auditorias(d, h),
             ),
         }
         self.tablas = {}
         self.datos = {}
         for nombre, (cols, _) in self.defs.items():
-            fr = ttk.Frame(self.nb, padding=10)
-            marco, tv = cmp.tabla(fr, cols, altura=16)
+            fr = ttk.Frame(self.nb, style="Tarjeta.TFrame", padding=12)
+            marco, tv = cmp.tabla(fr, cols, altura=14)
             marco.pack(fill=BOTH, expand=YES)
             self.nb.add(fr, text=nombre)
             self.tablas[nombre] = (tv, cols)

@@ -11,6 +11,8 @@ from logica.seguridad import (ROL_ADMIN, ErrorPermiso, ErrorValidacion, Sesion, 
 MAX_INTENTOS = 5
 MINUTOS_BLOQUEO = 5
 _FORMATO = "%Y-%m-%d %H:%M:%S"
+USUARIO_ADMIN_DEFECTO = "administrador"
+NOMBRE_ADMIN_DEFECTO = "Administrador"
 
 PREGUNTAS_PREDEFINIDAS = [
     "¿Cuál fue el nombre de tu primera mascota?",
@@ -47,12 +49,12 @@ def tiene_preguntas_admin() -> bool:
     return (fila["n"] if fila else 0) >= 2
 
 
-def registrar_primer_admin(username, nombre, password, confirmacion):
+def registrar_primer_admin(username=USUARIO_ADMIN_DEFECTO, nombre=NOMBRE_ADMIN_DEFECTO, password="", confirmacion=""):
     """Solo funciona si aún no existe ningún administrador (evita escalar privilegios)."""
     if existe_admin():
         raise ErrorValidacion("Ya existe un administrador registrado en el sistema.")
-    username = username.strip()
-    nombre = nombre.strip()
+    username = (username or USUARIO_ADMIN_DEFECTO).strip()
+    nombre = (nombre or NOMBRE_ADMIN_DEFECTO).strip()
     validar_username(username)
     if not nombre:
         raise ErrorValidacion("El nombre completo es obligatorio.")
@@ -63,6 +65,72 @@ def registrar_primer_admin(username, nombre, password, confirmacion):
             (username, nombre, hash_password(password), ROL_ADMIN),
         )
         auditar("CREAR_ADMIN_INICIAL", username, con)
+
+
+def configurar_admin_inicial(
+    password: str,
+    confirmacion: str,
+    pregunta1: str,
+    respuesta1: str,
+    pregunta2: str,
+    respuesta2: str,
+):
+    """Crea la cuenta por defecto 'administrador' con su clave y guarda sus 2 preguntas de seguridad en un solo paso."""
+    if tiene_preguntas_admin() and existe_admin() and not Sesion.es_admin():
+        raise ErrorPermiso("La cuenta de administrador ya fue configurada.")
+
+    p1 = (pregunta1 or "").strip()
+    p2 = (pregunta2 or "").strip()
+    r1 = _normalizar_respuesta(respuesta1)
+    r2 = _normalizar_respuesta(respuesta2)
+
+    if not existe_admin() or password or confirmacion:
+        validar_password(password, confirmacion)
+
+    if not p1 or not p2:
+        raise ErrorValidacion("Debes seleccionar ambas preguntas de seguridad.")
+    if p1 not in PREGUNTAS_PREDEFINIDAS or p2 not in PREGUNTAS_PREDEFINIDAS:
+        raise ErrorValidacion("Las preguntas seleccionadas no son válidas.")
+    if p1 == p2:
+        raise ErrorValidacion("Debes elegir dos preguntas de seguridad diferentes.")
+    if len(r1) < 2 or len(r2) < 2:
+        raise ErrorValidacion("Cada respuesta de seguridad debe tener al menos 2 caracteres.")
+
+    with transaccion() as con:
+        admin_fila = con.execute(
+            "SELECT id_usuario, username FROM usuarios WHERE id_rol = ? AND activo = 1 ORDER BY id_usuario LIMIT 1",
+            (ROL_ADMIN,),
+        ).fetchone()
+        if not admin_fila:
+            cur = con.execute(
+                "INSERT INTO usuarios (username, nombre_completo, password_hash, id_rol, activo) VALUES (?, ?, ?, ?, 1)",
+                (USUARIO_ADMIN_DEFECTO, NOMBRE_ADMIN_DEFECTO, hash_password(password), ROL_ADMIN),
+            )
+            id_admin = cur.lastrowid
+            uname = USUARIO_ADMIN_DEFECTO
+            auditar("CREAR_ADMIN_INICIAL", uname, con)
+        else:
+            id_admin = admin_fila["id_usuario"]
+            uname = admin_fila["username"]
+            if password:
+                con.execute(
+                    "UPDATE usuarios SET password_hash = ?, intentos_fallidos = 0, bloqueado_hasta = NULL WHERE id_usuario = ?",
+                    (hash_password(password), id_admin),
+                )
+
+        con.execute("DELETE FROM preguntas_seguridad WHERE id_usuario = ?", (id_admin,))
+        con.execute(
+            "INSERT INTO preguntas_seguridad (id_usuario, orden, pregunta, respuesta_hash) VALUES (?, 1, ?, ?)",
+            (id_admin, p1, hash_password(r1)),
+        )
+        con.execute(
+            "INSERT INTO preguntas_seguridad (id_usuario, orden, pregunta, respuesta_hash) VALUES (?, 2, ?, ?)",
+            (id_admin, p2, hash_password(r2)),
+        )
+        con.execute(
+            "INSERT INTO auditoria (id_usuario, accion, detalle) VALUES (?, 'CONFIGURAR_PREGUNTAS_SEGURIDAD', ?)",
+            (id_admin, uname),
+        )
 
 
 def guardar_preguntas_admin(pregunta1: str, respuesta1: str, pregunta2: str, respuesta2: str, username: str | None = None):
@@ -162,9 +230,9 @@ def _registrar_fallo(con, usuario: dict, ahora: datetime, accion: str, msg_base:
     return f"{msg_base} Intentos restantes: {MAX_INTENTOS - intentos}."
 
 
-def obtener_preguntas_recuperacion(username: str) -> list[str]:
+def obtener_preguntas_recuperacion(username: str = USUARIO_ADMIN_DEFECTO) -> list[str]:
     """Devuelve las 2 preguntas configuradas para el administrador indicado."""
-    username = (username or "").strip()
+    username = (username or USUARIO_ADMIN_DEFECTO).strip()
     if not username:
         raise ErrorValidacion("Ingresa tu nombre de usuario de administrador.")
 
@@ -191,7 +259,7 @@ def obtener_preguntas_recuperacion(username: str) -> list[str]:
 
 def recuperar_password_admin(username: str, respuesta1: str, respuesta2: str, nueva_password: str, confirmacion: str):
     """Valida las respuestas a las preguntas personales y actualiza la contraseña del administrador."""
-    username = (username or "").strip()
+    username = (username or USUARIO_ADMIN_DEFECTO).strip()
     r1, r2 = _normalizar_respuesta(respuesta1), _normalizar_respuesta(respuesta2)
     if not username:
         raise ErrorValidacion("Ingresa el usuario administrador.")
@@ -254,22 +322,6 @@ def iniciar_sesion(username, password) -> dict:
                JOIN roles r ON r.id_rol = u.id_rol WHERE u.username = ?""",
             (username,),
         ).fetchone()
-
-        if fila is None:
-            # Permite que el administrador también inicie sesión escribiendo el NIT o correo registrado en Neon.tech
-            emp_o_lic = con.execute(
-                """SELECT 1 FROM empresa WHERE id_empresa = 1 AND (nit = ? OR LOWER(correo) = LOWER(?))
-                   UNION
-                   SELECT 1 FROM licencia_sistema WHERE id_licencia = 1 AND LOWER(email_cuenta) = LOWER(?)""",
-                (username, username, username),
-            ).fetchone()
-            if emp_o_lic:
-                fila = con.execute(
-                    """SELECT u.*, r.nombre AS rol FROM usuarios u
-                       JOIN roles r ON r.id_rol = u.id_rol
-                       WHERE u.id_rol = ? AND u.activo = 1 ORDER BY u.id_usuario LIMIT 1""",
-                    (ROL_ADMIN,),
-                ).fetchone()
 
         if fila is None:
             verificar_password_ficticio(password)

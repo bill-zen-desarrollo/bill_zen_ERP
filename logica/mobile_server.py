@@ -16,10 +16,11 @@ from datetime import date, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import urllib.request
 from urllib.parse import parse_qs, urlparse
 
-from database.conexion import consultar_uno, ruta_db, transaccion
-from logica.auth_logic import _error_si_bloqueado, _registrar_fallo
+from database.conexion import _carpeta_datos, consultar_uno, ruta_db, transaccion
+from logica.auth_logic import USUARIO_ADMIN_DEFECTO, _error_si_bloqueado, _registrar_fallo
 from logica.seguridad import (
     ROL_ADMIN,
     Sesion,
@@ -34,6 +35,8 @@ TTL_PAIRING_SEG = 300
 TTL_SESION_MOVIL_SEG = 43200 
 URL_DESCARGA_APP = "https://bill-zen-users.vercel.app/#descargar"
 URL_LOGIN_PORTAL = "https://bill-zen-users.vercel.app/login.html"
+URL_DESCARGA_CLOUDFLARED = "https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
+URL_EJECUTABLE_CLOUDFLARED = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
 _FORMATO_FECHA = "%Y-%m-%d %H:%M:%S"
 
 # Claves efímeras en RAM y control de revocación
@@ -204,7 +207,7 @@ def autenticar_login_movil(pairing_token: str, username: str, password: str, ip_
             "error": "El código QR de vinculación es inválido o ya expiró (máx. 5 min). Genera un nuevo QR en Bill Zen.",
         }
 
-    username = (username or "").strip()
+    username = (username or USUARIO_ADMIN_DEFECTO).strip()
     if not username or not password:
         return int(HTTPStatus.BAD_REQUEST), {
             "ok": False,
@@ -384,20 +387,20 @@ def obtener_auditoria_dia_ro() -> dict:
 
         # c) Movimientos de stock hoy (últimos 30) + alertas de stock bajo
         filas_movs = con.execute(
-            """SELECT m.id_movimiento,
-                      m.fecha,
-                      m.tipo,
+            """SELECT m.id AS id_movimiento,
+                      m.created_at AS fecha,
+                      m.movement_type AS tipo,
                       p.codigo,
                       p.nombre AS producto,
-                      m.cantidad,
-                      m.stock_final,
-                      COALESCE(m.referencia, '') AS referencia,
+                      (m.new_stock - m.previous_stock) AS cantidad,
+                      m.new_stock AS stock_final,
+                      COALESCE(m.reason, '') AS referencia,
                       COALESCE(u.nombre_completo, u.username, 'Sistema') AS usuario
-               FROM movimientos_inventario m
-               JOIN productos p ON p.id_producto = m.id_producto
-               LEFT JOIN usuarios u ON u.id_usuario = m.id_usuario
-               WHERE date(m.fecha) = ? AND m.tipo IN ('ENTRADA', 'VENTA', 'ANULACION')
-               ORDER BY m.id_movimiento DESC
+               FROM inventory_movements m
+               JOIN productos p ON p.id_producto = m.product_id
+               LEFT JOIN usuarios u ON u.id_usuario = m.user_id
+               WHERE date(m.created_at) = ?
+               ORDER BY m.id DESC
                LIMIT 30""",
             (hoy,),
         ).fetchall()
@@ -723,29 +726,89 @@ def iniciar_servidor_movil(puerto: int = PUERTO_DEFECTO) -> int:
         return _PUERTO_ACTIVO
 
 
+def _ruta_cloudflared_local() -> Path:
+    if os.environ.get("BILLZEN_DB"):
+        return Path(os.environ["BILLZEN_DB"]).resolve().parent / "cloudflared.exe"
+    return Path(_carpeta_datos()) / "cloudflared.exe"
+
+
 def _buscar_binario_cloudflared() -> str | None:
-    """Busca `cloudflared` en PATH o en la carpeta `assets/` del proyecto."""
+    """Busca `cloudflared` en PATH, en `%PROGRAMDATA%\\BillZen` o en `assets/` del proyecto."""
     en_path = shutil.which("cloudflared") or shutil.which("cloudflared.exe")
     if en_path:
         return en_path
     base = Path(__file__).resolve().parent.parent
     for candidato in (
+        _ruta_cloudflared_local(),
         base / "assets" / "cloudflared.exe",
         base / "cloudflared.exe",
     ):
-        if candidato.is_file():
-            return str(candidato)
+        try:
+            if candidato.is_file() and candidato.stat().st_size > 1_000_000:
+                return str(candidato)
+        except OSError:
+            continue
+    return None
+
+
+def tiene_cloudflared_instalado() -> bool:
+    """Indica si el ejecutable `cloudflared` está disponible en el equipo."""
+    return _buscar_binario_cloudflared() is not None
+
+
+def _descargar_cloudflared_auto() -> str | None:
+    """Descarga silenciosamente `cloudflared-windows-amd64.exe` desde el Release oficial de Cloudflare
+    y lo guarda en `%PROGRAMDATA%\\BillZen\\cloudflared.exe` sin requerir intervención del usuario."""
+    global _ESTADO_TUNEL
+    destino = _ruta_cloudflared_local()
+    temporal = destino.with_suffix(".exe.part")
+    try:
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        with _LOCK:
+            _ESTADO_TUNEL = "Configurando túnel remoto por primera vez (0%)..."
+        req = urllib.request.Request(
+            URL_EJECUTABLE_CLOUDFLARED,
+            headers={"User-Agent": "BillZenERP-Desktop/1.0"},
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp, open(temporal, "wb") as fh:
+            total = int(resp.headers.get("Content-Length") or 0)
+            descargado = 0
+            ultimo_pct = -1
+            while True:
+                bloque = resp.read(256 * 1024)
+                if not bloque:
+                    break
+                fh.write(bloque)
+                descargado += len(bloque)
+                if total > 0:
+                    pct = min(99, int(descargado * 100 / total))
+                    if pct // 5 != ultimo_pct // 5:
+                        ultimo_pct = pct
+                        with _LOCK:
+                            _ESTADO_TUNEL = f"Configurando túnel remoto por primera vez ({pct}%)..."
+        if temporal.stat().st_size > 1_000_000:
+            os.replace(temporal, destino)
+            return str(destino)
+    except Exception:
+        try:
+            if temporal.exists():
+                temporal.unlink()
+        except OSError:
+            pass
     return None
 
 
 def iniciar_tunel_cloudflared(forzar_reinicio: bool = False) -> None:
     """Ejecuta `cloudflared tunnel --url http://127.0.0.1:<puerto>` oculto (`CREATE_NO_WINDOW`)
-    en un hilo daemon y captura automáticamente la URL `https://*.trycloudflare.com`."""
+    en un hilo daemon y captura automáticamente la URL `https://*.trycloudflare.com`.
+    Si `cloudflared.exe` no está en el equipo, lo descarga automáticamente en segundo plano."""
     global _PROCESO_TUNEL, _HILO_TUNEL, _URL_REMOTA, _ESTADO_TUNEL
     puerto = iniciar_servidor_movil()
 
     with _LOCK:
         if _PROCESO_TUNEL is not None and _PROCESO_TUNEL.poll() is None and not forzar_reinicio:
+            return
+        if _HILO_TUNEL is not None and _HILO_TUNEL.is_alive() and not forzar_reinicio:
             return
         if _PROCESO_TUNEL is not None:
             try:
@@ -754,18 +817,25 @@ def iniciar_tunel_cloudflared(forzar_reinicio: bool = False) -> None:
                 pass
             _PROCESO_TUNEL = None
         _URL_REMOTA = ""
-
-    binario = _buscar_binario_cloudflared()
-    if not binario:
-        with _LOCK:
-            _ESTADO_TUNEL = "Solo Red Local (instala cloudflared para acceso fuera de la red Wi-Fi)"
-        return
-
-    with _LOCK:
         _ESTADO_TUNEL = "Conectando túnel HTTPS..."
 
     def _worker_tunel():
         global _PROCESO_TUNEL, _URL_REMOTA, _ESTADO_TUNEL
+        binario = _buscar_binario_cloudflared()
+        if not binario:
+            # En pruebas automatizadas (BILLZEN_DB) no descarga 37 MB a menos que se fuerce
+            if os.environ.get("BILLZEN_DB") and not forzar_reinicio:
+                with _LOCK:
+                    _ESTADO_TUNEL = "Solo Red Local (Wi-Fi)"
+                return
+            binario = _descargar_cloudflared_auto()
+            if not binario:
+                with _LOCK:
+                    _ESTADO_TUNEL = "Solo Red Local (verifica tu internet y pulsa Reconectar túnel)"
+                return
+
+        with _LOCK:
+            _ESTADO_TUNEL = "Conectando túnel HTTPS..."
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
         cmd = [binario, "tunnel", "--no-autoupdate", "--url", f"http://127.0.0.1:{puerto}"]
         try:
@@ -837,7 +907,7 @@ def generar_paquete_qr_emparejamiento() -> dict:
     payload_qr = {
         "nit": emp.get("nit") or "",
         "empresa": emp.get("razon_social") or "Bill Zen ERP",
-        "remote_url": est["remote_url"] or URL_DESCARGA_APP,
+        "remote_url": est["remote_url"] or "",
         "local_url": est["local_url"],
         "pairing_token": token_qr,
     }

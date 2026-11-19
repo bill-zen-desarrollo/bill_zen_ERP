@@ -8,8 +8,8 @@ from ttkbootstrap.constants import *
 from ui import tema
 
 
-def tarjeta(padre, padding=18, **kw):
-    """Contenedor blanco con borde sutil."""
+def tarjeta(padre, padding=20, **kw):
+    """Contenedor blanco con borde sutil (#DEDAD0) y padding interno SaaS."""
     borde = tk.Frame(padre, bg=tema.BEIGE_OSCURO)
     interior = ttk.Frame(borde, style="Tarjeta.TFrame", padding=padding)
     interior.pack(fill=BOTH, expand=YES, padx=1, pady=1)
@@ -22,11 +22,33 @@ def tarjeta_kpi(padre, titulo, valor="—", detalle="", acento=tema.VERDE):
     cuerpo = tk.Frame(borde, bg=tema.BLANCO)
     cuerpo.pack(fill=BOTH, expand=YES, padx=1, pady=1)
     tk.Frame(cuerpo, bg=acento, height=4).pack(fill=X)
-    ttk.Label(cuerpo, text=titulo.upper(), style="KPITexto.TLabel", font=(tema.FUENTE, 8, "bold")).pack(anchor=W, padx=16, pady=(12, 0))
+    lbl_titulo = ttk.Label(
+        cuerpo,
+        text=titulo.upper(),
+        style="KPITexto.TLabel",
+        font=(tema.FUENTE, 9, "bold"),
+        anchor=W,
+        justify=LEFT,
+    )
+    lbl_titulo.pack(fill=X, padx=16, pady=(10, 2))
     lbl_valor = ttk.Label(cuerpo, text=valor, style="KPI.TLabel")
     lbl_valor.pack(anchor=W, padx=16)
-    lbl_detalle = ttk.Label(cuerpo, text=detalle, style="KPITexto.TLabel")
-    lbl_detalle.pack(anchor=W, padx=16, pady=(0, 12))
+    lbl_detalle = ttk.Label(
+        cuerpo,
+        text=detalle,
+        style="KPITexto.TLabel",
+        font=(tema.FUENTE, 10),
+        anchor=W,
+        justify=LEFT,
+    )
+    lbl_detalle.pack(fill=X, padx=16, pady=(2, 12))
+
+    def _ajustar_wrap(evento):
+        ancho_disp = max(120, evento.width - 32)
+        lbl_titulo.configure(wraplength=ancho_disp)
+        lbl_detalle.configure(wraplength=ancho_disp)
+
+    cuerpo.bind("<Configure>", _ajustar_wrap, add="+")
     borde.valor = lbl_valor
     borde.detalle = lbl_detalle
     return borde
@@ -36,27 +58,71 @@ def encabezado(padre, titulo, subtitulo=""):
     marco = ttk.Frame(padre)
     ttk.Label(marco, text=titulo, style="Titulo.TLabel").pack(anchor=W)
     if subtitulo:
-        ttk.Label(marco, text=subtitulo, style="Subtitulo.TLabel").pack(anchor=W)
+        ttk.Label(marco, text=subtitulo, style="Subtitulo.TLabel", font=(tema.FUENTE, 11)).pack(anchor=W, pady=(2, 0))
     return marco
 
 
 def tabla(padre, columnas, altura=12):
-    """columnas: [(clave, titulo, ancho, alineación)]. Devuelve (marco, treeview)."""
+    """columnas: [(clave, titulo, ancho, alineación)]. Devuelve (marco, treeview).
+    Ajusta los anchos mínimos al texto de cada encabezado y reparte proporcionalmente
+    el espacio disponible al redimensionar para evitar recortes."""
     marco = ttk.Frame(padre, style="Tarjeta.TFrame")
     tv = ttk.Treeview(marco, columns=[c[0] for c in columnas], show="headings", height=altura, selectmode="browse")
-    cols_estirables = {"nombre", "n", "c", "d", "p", "detalle", "concepto", "cajero", "metodo_pago"}
-    for i, (clave, titulo, ancho, alin) in enumerate(columnas):
+
+    pesos = {}
+    minimos = {}
+    for clave, titulo, ancho, alin in columnas:
         tv.heading(clave, text=titulo)
-        estirar = (clave in cols_estirables) or (i == 1 and len(columnas) > 2)
-        tv.column(clave, width=ancho, anchor=alin, minwidth=55, stretch=estirar)
+        min_encabezado = max(62, len(titulo) * 8 + 26)
+        ancho_inicial = max(int(ancho), min_encabezado)
+        pesos[clave] = ancho_inicial
+        minimos[clave] = min_encabezado
+        tv.column(clave, width=ancho_inicial, anchor=alin, minwidth=min_encabezado, stretch=True)
+
     barra = ttk.Scrollbar(marco, orient=VERTICAL, command=tv.yview)
     tv.configure(yscrollcommand=barra.set)
     tv.pack(side=LEFT, fill=BOTH, expand=YES)
     barra.pack(side=RIGHT, fill=Y)
-    tv.tag_configure("par", background="#FBF8F1")
+
+    tv.tag_configure("par", background="#FAF9F5")
     tv.tag_configure("impar", background=tema.BLANCO)
     tv.tag_configure("alerta", foreground=tema.ROJO)
-    tv.tag_configure("anulada", foreground="#9a9a9a")
+    tv.tag_configure("anulada", foreground="#94A3B8")
+
+    # Distribución proporcional automática sin recortar encabezados
+    suma_pesos = max(1, sum(pesos.values()))
+    timer_cols = [None]
+    ultimo_ancho = [0]
+
+    def _distribuir_columnas(ancho_total: int):
+        if ancho_total <= 40 or not tv.winfo_exists():
+            return
+        disponible = ancho_total - 6
+        if disponible <= sum(minimos.values()):
+            for clave, _, _, _ in columnas:
+                tv.column(clave, width=minimos[clave])
+            return
+        asignado = 0
+        for idx, (clave, _, _, _) in enumerate(columnas):
+            if idx == len(columnas) - 1:
+                w_col = max(minimos[clave], disponible - asignado)
+            else:
+                w_col = max(minimos[clave], int(disponible * pesos[clave] / suma_pesos))
+                asignado += w_col
+            tv.column(clave, width=w_col)
+
+    def _al_configurar(evento):
+        if abs(evento.width - ultimo_ancho[0]) < 8:
+            return
+        ultimo_ancho[0] = evento.width
+        if timer_cols[0]:
+            try:
+                tv.after_cancel(timer_cols[0])
+            except Exception:
+                pass
+        timer_cols[0] = tv.after(60, lambda w=evento.width: _distribuir_columnas(w))
+
+    tv.bind("<Configure>", _al_configurar, add="+")
     return marco, tv
 
 
@@ -71,11 +137,13 @@ def llenar_tabla(tv, filas, etiquetas=None):
 
 
 def campo(padre, etiqueta, fila=None, columna=0, ancho=None, show=None, estilo_label="Tarjeta.TLabel"):
-    """Etiqueta + Entry apilados. Devuelve el Entry."""
-    marco = ttk.Frame(padre, style="Tarjeta.TFrame" if estilo_label == "Tarjeta.TLabel" else "TFrame")
-    ttk.Label(marco, text=etiqueta, style=estilo_label, font=(tema.FUENTE, 9, "bold")).pack(anchor=W, pady=(12, 4))
-    entrada = ttk.Entry(marco, show=show, width=ancho or 24)
-    entrada.pack(fill=X, pady=(0, 10))
+    """Etiqueta (10pt bold) + Entry (11pt) apilados. Devuelve el Entry."""
+    es_tarjeta = estilo_label == "Tarjeta.TLabel"
+    marco = ttk.Frame(padre, style="Tarjeta.TFrame" if es_tarjeta else "TFrame")
+    st_lbl = "FormLabel.TLabel" if es_tarjeta else "FormLabelFondo.TLabel"
+    ttk.Label(marco, text=etiqueta, style=st_lbl, font=(tema.FUENTE, 10, "bold")).pack(anchor=W, pady=(6, 3))
+    entrada = ttk.Entry(marco, show=show, width=ancho or 24, font=(tema.FUENTE, 11))
+    entrada.pack(fill=X, pady=(0, 6))
     if fila is not None:
         marco.grid(row=fila, column=columna, sticky=EW, padx=6)
     else:
